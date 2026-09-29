@@ -30,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        framework: [foundry, hardhat]
+        framework: [foundry]
         pm: [npm, yarn]
         node: [lts/*]
         include:

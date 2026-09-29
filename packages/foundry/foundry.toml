@@ -1,7 +1,8 @@
 [profile.default]
 src = 'contracts'
 out = 'out'
-libs = ['lib']
+# OpenZeppelin comes from npm (node_modules here with yarn, hoisted to the root with npm)
+libs = ['lib', 'node_modules', '../../node_modules']
 fs_permissions = [
     { access = "read-write", path = "deployments" },
     { access = "read-write", path = "./" }
