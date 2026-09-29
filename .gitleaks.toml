@@ -1,0 +1,10 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Vendored third-party code"
+paths = [
+  '''(^|/)\.yarn/releases/''',
+  '''(^|/)node_modules/''',
+  '''(^|/)packages/foundry/lib/''',
+]

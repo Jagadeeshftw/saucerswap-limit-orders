@@ -1,0 +1,71 @@
+name: Template gate
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: "17 6 * * *"
+
+concurrency:
+  group: gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      is-template: ${{ steps.check.outputs.is-template }}
+    steps:
+      - uses: actions/checkout@v4
+      # Scaffolded apps have no template.json (the CLI consumes it), so this workflow stays inert there.
+      - id: check
+        run: echo "is-template=$([ -f template.json ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+  gate:
+    needs: detect
+    if: needs.detect.outputs.is-template == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        framework: [foundry, hardhat]
+        pm: [npm, yarn]
+        node: [lts/*]
+        include:
+          - framework: foundry
+            pm: npm
+            node: 20.18.3
+    name: gate (${{ matrix.framework }}, ${{ matrix.pm }}, node ${{ matrix.node }})
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Install gitleaks
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz \
+            | tar -xz -C /usr/local/bin gitleaks
+
+      - name: Run gate check
+        env:
+          GIGET_AUTH: ${{ github.token }}
+        run: >
+          node scripts/gate-check.mjs
+          --template ${{ github.repository }}#${{ github.sha }}
+          --frameworks ${{ matrix.framework }}
+          --pms ${{ matrix.pm }}
+          --allow-pending-proof
+
+      - name: Upload gate report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-report-${{ matrix.framework }}-${{ matrix.pm }}-${{ strategy.job-index }}
+          path: .gate/report.json
+          if-no-files-found: ignore

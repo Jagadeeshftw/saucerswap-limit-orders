@@ -1,0 +1,41 @@
+{
+  "name": "scaffold-hbar-template",
+  "description": "Scaffold-HBAR template skeleton: Next.js, Hardhat or Foundry, Hedera testnet.",
+  "version": "0.0.1",
+  "create-scaffold-hbar": {
+    "capabilities": {
+      "frontend": ["nextjs-app"],
+      "solidityFramework": ["foundry", "hardhat"],
+      "packageManager": ["yarn", "npm"]
+    },
+    "defaults": {
+      "frontend": "nextjs-app",
+      "solidityFramework": "foundry",
+      "packageManager": "yarn"
+    },
+    "outro": {
+      "sections": [
+        {
+          "title": "Next steps",
+          "steps": [
+            {
+              "label": "Start a local chain",
+              "command": "{run:framework:chain}"
+            },
+            {
+              "label": "Deploy contracts to that node",
+              "command": "{run:framework:deploy} --network localhost"
+            },
+            {
+              "label": "Start the frontend",
+              "command": "{run:next:dev}"
+            },
+            {
+              "text": "README.md covers testnet setup, environment variables and architecture."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
