@@ -1,15 +1,9 @@
-// SPDX-License-Identifier: Apache-2.0
-pragma solidity ^0.8.0;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.28;
 
-/// Minimal interface for the HTS precompile at 0x167 (create fungible token + mint).
-/// Struct layout matches the official IHederaTokenService for ABI compatibility.
+/// @title The subset of the Hedera Token Service system contract (0x167) used by OrderVault.
+/// @notice Every call returns a HAPI response code; 22 is SUCCESS.
 interface IHederaTokenService {
-    struct Expiry {
-        int64 second;
-        address autoRenewAccount;
-        int64 autoRenewPeriod;
-    }
-
     struct KeyValue {
         bool inheritAccountKey;
         address contractId;
@@ -18,9 +12,16 @@ interface IHederaTokenService {
         address delegatableContractId;
     }
 
+    /// @dev `keyType` is a bit mask: 1 admin, 2 kyc, 4 freeze, 8 wipe, 16 supply, 32 fee, 64 pause.
     struct TokenKey {
         uint256 keyType;
         KeyValue key;
+    }
+
+    struct Expiry {
+        int64 second;
+        address autoRenewAccount;
+        int64 autoRenewPeriod;
     }
 
     struct HederaToken {
@@ -35,18 +36,26 @@ interface IHederaTokenService {
         Expiry expiry;
     }
 
-    /// Creates a Fungible Token with the specified properties.
-    /// @return responseCode SUCCESS is 22.
-    /// @return tokenAddress The created token's address.
-    function createFungibleToken(HederaToken memory token, int64 initialTotalSupply, int32 decimals)
+    function createNonFungibleToken(HederaToken memory token)
         external
         payable
         returns (int64 responseCode, address tokenAddress);
 
-    /// Mints an amount of the token to the treasury account.
-    /// @param metadata For NFTs only; use empty array for fungible.
-    /// @return responseCode SUCCESS is 22.
     function mintToken(address token, int64 amount, bytes[] memory metadata)
         external
         returns (int64 responseCode, int64 newTotalSupply, int64[] memory serialNumbers);
+
+    function transferNFT(address token, address sender, address recipient, int64 serialNumber)
+        external
+        returns (int64 responseCode);
+
+    function burnToken(address token, int64 amount, int64[] memory serialNumbers)
+        external
+        returns (int64 responseCode, int64 newTotalSupply);
+
+    function wipeTokenAccountNFT(address token, address account, int64[] memory serialNumbers)
+        external
+        returns (int64 responseCode);
+
+    function associateToken(address account, address token) external returns (int64 responseCode);
 }

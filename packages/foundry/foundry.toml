@@ -9,10 +9,16 @@ fs_permissions = [
 ]
 ffi = true
 evm_version = "cancun"
+solc_version = "0.8.30"
+optimizer = true
+optimizer_runs = 200
+via_ir = true
 
 # Suppress style lints for API/modifier names we don't control
 [lint]
 exclude_lints = ["mixed-case-variable", "mixed-case-function"]
+# Tests narrow bounded fuzz inputs on purpose; lint rules apply to contracts and scripts.
+ignore = ["test/**/*.sol"]
 
 [rpc_endpoints]
 localhost = "http://127.0.0.1:8545"

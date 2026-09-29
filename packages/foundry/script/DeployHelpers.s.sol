@@ -80,18 +80,11 @@ contract ScaffoldETHDeploy is Script {
         vm.writeJson(jsonWrite, path);
     }
 
-    function findChainName() public returns (string memory) {
-        uint256 thisChainId = block.chainid;
-        string[2][] memory allRpcUrls = vm.rpcUrls();
-        for (uint256 i = 0; i < allRpcUrls.length; i++) {
-            try vm.createSelectFork(allRpcUrls[i][1]) {
-                if (block.chainid == thisChainId) {
-                    return allRpcUrls[i][0];
-                }
-            } catch {
-                continue;
-            }
-        }
+    /// @notice The foundry.toml RPC alias for the current chain.
+    function findChainName() public view returns (string memory) {
+        if (block.chainid == 296) return "hedera_testnet";
+        if (block.chainid == 295) return "hedera_mainnet";
+        if (block.chainid == 31_337) return "localhost";
         revert InvalidChain();
     }
 }

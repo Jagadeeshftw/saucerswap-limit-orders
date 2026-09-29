@@ -6,111 +6,149 @@ import { GenericContractsDeclaration } from "~~/utils/scaffold-hbar/contract";
 
 const deployedContracts = {
   296: {
-    HederaToken: {
-      address: "0xa510c1b5ebcefb83267f4f2bae2765611606c85a",
+    MarketGuard: {
+      address: "0xe2f1e740d362a1ca4a02366054c39907ab160f5d",
+      abi: [
+        {
+          type: "error",
+          name: "SafeCastOverflowedIntToUint",
+          inputs: [
+            {
+              name: "value",
+              type: "int256",
+              internalType: "int256",
+            },
+          ],
+        },
+        {
+          type: "error",
+          name: "TickOutOfRange",
+          inputs: [
+            {
+              name: "tick",
+              type: "int24",
+              internalType: "int24",
+            },
+          ],
+        },
+      ],
+      inheritedFunctions: {},
+      deployedOnBlock: 41144244,
+    },
+    OrderVault: {
+      address: "0xf50e10ab7b6b9b71d4d74464a5df2e0d764353d1",
       abi: [
         {
           type: "constructor",
           inputs: [
             {
-              name: "initialOwner",
+              name: "owner_",
               type: "address",
               internalType: "address",
+            },
+            {
+              name: "router_",
+              type: "address",
+              internalType: "contract ISaucerSwapV2Router",
+            },
+            {
+              name: "whbar_",
+              type: "address",
+              internalType: "address",
+            },
+            {
+              name: "costs_",
+              type: "tuple",
+              internalType: "struct Costs",
+              components: [
+                {
+                  name: "scheduleGas",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "sweepBaseGas",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "checkGas",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "fillGasHbarIn",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "fillGasTokenIn",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "settleGas",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "gasPriceTinycents",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "safetyBps",
+                  type: "uint16",
+                  internalType: "uint16",
+                },
+              ],
             },
           ],
           stateMutability: "nonpayable",
         },
         {
-          type: "function",
-          name: "allowance",
-          inputs: [
-            {
-              name: "owner",
-              type: "address",
-              internalType: "address",
-            },
-            {
-              name: "spender",
-              type: "address",
-              internalType: "address",
-            },
-          ],
-          outputs: [
-            {
-              name: "",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          stateMutability: "view",
+          type: "receive",
+          stateMutability: "payable",
         },
         {
           type: "function",
-          name: "approve",
-          inputs: [
-            {
-              name: "spender",
-              type: "address",
-              internalType: "address",
-            },
-            {
-              name: "value",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          outputs: [
-            {
-              name: "",
-              type: "bool",
-              internalType: "bool",
-            },
-          ],
-          stateMutability: "nonpayable",
-        },
-        {
-          type: "function",
-          name: "balanceOf",
-          inputs: [
-            {
-              name: "account",
-              type: "address",
-              internalType: "address",
-            },
-          ],
-          outputs: [
-            {
-              name: "",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          stateMutability: "view",
-        },
-        {
-          type: "function",
-          name: "decimals",
+          name: "ROUTER",
           inputs: [],
           outputs: [
             {
               name: "",
-              type: "uint8",
-              internalType: "uint8",
+              type: "address",
+              internalType: "contract ISaucerSwapV2Router",
             },
           ],
           stateMutability: "view",
         },
         {
           type: "function",
-          name: "mint",
-          inputs: [
+          name: "WHBAR",
+          inputs: [],
+          outputs: [
             {
-              name: "to",
+              name: "",
               type: "address",
               internalType: "address",
             },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "acceptOwnership",
+          inputs: [],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
+          name: "cancel",
+          inputs: [
             {
-              name: "amount",
+              name: "orderId",
               type: "uint256",
               internalType: "uint256",
             },
@@ -120,13 +158,777 @@ const deployedContracts = {
         },
         {
           type: "function",
-          name: "name",
+          name: "checkCost",
+          inputs: [
+            {
+              name: "marketId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "checkCostShared",
+          inputs: [
+            {
+              name: "fundedOrders",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "claim",
+          inputs: [
+            {
+              name: "token",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
+          name: "collection",
           inputs: [],
           outputs: [
             {
               name: "",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "costs",
+          inputs: [],
+          outputs: [
+            {
+              name: "scheduleGas",
+              type: "uint32",
+              internalType: "uint32",
+            },
+            {
+              name: "sweepBaseGas",
+              type: "uint32",
+              internalType: "uint32",
+            },
+            {
+              name: "checkGas",
+              type: "uint32",
+              internalType: "uint32",
+            },
+            {
+              name: "fillGasHbarIn",
+              type: "uint32",
+              internalType: "uint32",
+            },
+            {
+              name: "fillGasTokenIn",
+              type: "uint32",
+              internalType: "uint32",
+            },
+            {
+              name: "settleGas",
+              type: "uint32",
+              internalType: "uint32",
+            },
+            {
+              name: "gasPriceTinycents",
+              type: "uint32",
+              internalType: "uint32",
+            },
+            {
+              name: "safetyBps",
+              type: "uint16",
+              internalType: "uint16",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "credits",
+          inputs: [
+            {
+              name: "account",
+              type: "address",
+              internalType: "address",
+            },
+            {
+              name: "token",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "escrowed",
+          inputs: [
+            {
+              name: "token",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "executeOrder",
+          inputs: [
+            {
+              name: "orderId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "settled",
+              type: "bool",
+              internalType: "bool",
+            },
+          ],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
+          name: "fillCost",
+          inputs: [
+            {
+              name: "marketId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "side",
+              type: "uint8",
+              internalType: "enum Side",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "fillFromVault",
+          inputs: [
+            {
+              name: "orderId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "oraclePrice",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "poolPrice",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "amountOut",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
+          name: "getCosts",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "tuple",
+              internalType: "struct Costs",
+              components: [
+                {
+                  name: "scheduleGas",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "sweepBaseGas",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "checkGas",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "fillGasHbarIn",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "fillGasTokenIn",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "settleGas",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "gasPriceTinycents",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "safetyBps",
+                  type: "uint16",
+                  internalType: "uint16",
+                },
+              ],
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "getMarket",
+          inputs: [
+            {
+              name: "marketId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "tuple",
+              internalType: "struct Market",
+              components: [
+                {
+                  name: "base",
+                  type: "address",
+                  internalType: "address",
+                },
+                {
+                  name: "quote",
+                  type: "address",
+                  internalType: "address",
+                },
+                {
+                  name: "baseDecimals",
+                  type: "uint8",
+                  internalType: "uint8",
+                },
+                {
+                  name: "quoteDecimals",
+                  type: "uint8",
+                  internalType: "uint8",
+                },
+                {
+                  name: "baseIsHbar",
+                  type: "bool",
+                  internalType: "bool",
+                },
+                {
+                  name: "quoteIsHbar",
+                  type: "bool",
+                  internalType: "bool",
+                },
+                {
+                  name: "baseFeed",
+                  type: "address",
+                  internalType: "contract IAggregatorV3",
+                },
+                {
+                  name: "quoteFeed",
+                  type: "address",
+                  internalType: "contract IAggregatorV3",
+                },
+                {
+                  name: "baseFeedDecimals",
+                  type: "uint8",
+                  internalType: "uint8",
+                },
+                {
+                  name: "quoteFeedDecimals",
+                  type: "uint8",
+                  internalType: "uint8",
+                },
+                {
+                  name: "pool",
+                  type: "address",
+                  internalType: "contract ISaucerSwapV2Pool",
+                },
+                {
+                  name: "poolFee",
+                  type: "uint24",
+                  internalType: "uint24",
+                },
+                {
+                  name: "baseIsToken0",
+                  type: "bool",
+                  internalType: "bool",
+                },
+                {
+                  name: "active",
+                  type: "bool",
+                  internalType: "bool",
+                },
+                {
+                  name: "guard",
+                  type: "tuple",
+                  internalType: "struct GuardParams",
+                  components: [
+                    {
+                      name: "twapWindow",
+                      type: "uint32",
+                      internalType: "uint32",
+                    },
+                    {
+                      name: "maxDeviationBps",
+                      type: "uint16",
+                      internalType: "uint16",
+                    },
+                    {
+                      name: "maxOracleAge",
+                      type: "uint32",
+                      internalType: "uint32",
+                    },
+                    {
+                      name: "maxSlippageBps",
+                      type: "uint16",
+                      internalType: "uint16",
+                    },
+                  ],
+                },
+                {
+                  name: "sweep",
+                  type: "tuple",
+                  internalType: "struct SweepParams",
+                  components: [
+                    {
+                      name: "interval",
+                      type: "uint32",
+                      internalType: "uint32",
+                    },
+                    {
+                      name: "maxOrders",
+                      type: "uint16",
+                      internalType: "uint16",
+                    },
+                    {
+                      name: "maxFills",
+                      type: "uint8",
+                      internalType: "uint8",
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "getOrder",
+          inputs: [
+            {
+              name: "orderId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "tuple",
+              internalType: "struct Order",
+              components: [
+                {
+                  name: "marketId",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "side",
+                  type: "uint8",
+                  internalType: "enum Side",
+                },
+                {
+                  name: "trigger",
+                  type: "uint8",
+                  internalType: "enum Trigger",
+                },
+                {
+                  name: "status",
+                  type: "uint8",
+                  internalType: "enum Status",
+                },
+                {
+                  name: "funded",
+                  type: "bool",
+                  internalType: "bool",
+                },
+                {
+                  name: "slippageBps",
+                  type: "uint16",
+                  internalType: "uint16",
+                },
+                {
+                  name: "createdAt",
+                  type: "uint40",
+                  internalType: "uint40",
+                },
+                {
+                  name: "expiry",
+                  type: "uint40",
+                  internalType: "uint40",
+                },
+                {
+                  name: "amountIn",
+                  type: "uint128",
+                  internalType: "uint128",
+                },
+                {
+                  name: "triggerPrice",
+                  type: "uint128",
+                  internalType: "uint128",
+                },
+                {
+                  name: "budget",
+                  type: "uint128",
+                  internalType: "uint128",
+                },
+              ],
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "guardReading",
+          inputs: [
+            {
+              name: "marketId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "tuple",
+              internalType: "struct GuardReading",
+              components: [
+                {
+                  name: "state",
+                  type: "uint8",
+                  internalType: "enum GuardState",
+                },
+                {
+                  name: "oraclePrice",
+                  type: "uint256",
+                  internalType: "uint256",
+                },
+                {
+                  name: "poolPrice",
+                  type: "uint256",
+                  internalType: "uint256",
+                },
+                {
+                  name: "deviationBps",
+                  type: "uint256",
+                  internalType: "uint256",
+                },
+                {
+                  name: "oracleUpdatedAt",
+                  type: "uint256",
+                  internalType: "uint256",
+                },
+              ],
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "holderOf",
+          inputs: [
+            {
+              name: "orderId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "initialize",
+          inputs: [
+            {
+              name: "name",
               type: "string",
               internalType: "string",
+            },
+            {
+              name: "symbol",
+              type: "string",
+              internalType: "string",
+            },
+          ],
+          outputs: [],
+          stateMutability: "payable",
+        },
+        {
+          type: "function",
+          name: "listMarket",
+          inputs: [
+            {
+              name: "market",
+              type: "tuple",
+              internalType: "struct Market",
+              components: [
+                {
+                  name: "base",
+                  type: "address",
+                  internalType: "address",
+                },
+                {
+                  name: "quote",
+                  type: "address",
+                  internalType: "address",
+                },
+                {
+                  name: "baseDecimals",
+                  type: "uint8",
+                  internalType: "uint8",
+                },
+                {
+                  name: "quoteDecimals",
+                  type: "uint8",
+                  internalType: "uint8",
+                },
+                {
+                  name: "baseIsHbar",
+                  type: "bool",
+                  internalType: "bool",
+                },
+                {
+                  name: "quoteIsHbar",
+                  type: "bool",
+                  internalType: "bool",
+                },
+                {
+                  name: "baseFeed",
+                  type: "address",
+                  internalType: "contract IAggregatorV3",
+                },
+                {
+                  name: "quoteFeed",
+                  type: "address",
+                  internalType: "contract IAggregatorV3",
+                },
+                {
+                  name: "baseFeedDecimals",
+                  type: "uint8",
+                  internalType: "uint8",
+                },
+                {
+                  name: "quoteFeedDecimals",
+                  type: "uint8",
+                  internalType: "uint8",
+                },
+                {
+                  name: "pool",
+                  type: "address",
+                  internalType: "contract ISaucerSwapV2Pool",
+                },
+                {
+                  name: "poolFee",
+                  type: "uint24",
+                  internalType: "uint24",
+                },
+                {
+                  name: "baseIsToken0",
+                  type: "bool",
+                  internalType: "bool",
+                },
+                {
+                  name: "active",
+                  type: "bool",
+                  internalType: "bool",
+                },
+                {
+                  name: "guard",
+                  type: "tuple",
+                  internalType: "struct GuardParams",
+                  components: [
+                    {
+                      name: "twapWindow",
+                      type: "uint32",
+                      internalType: "uint32",
+                    },
+                    {
+                      name: "maxDeviationBps",
+                      type: "uint16",
+                      internalType: "uint16",
+                    },
+                    {
+                      name: "maxOracleAge",
+                      type: "uint32",
+                      internalType: "uint32",
+                    },
+                    {
+                      name: "maxSlippageBps",
+                      type: "uint16",
+                      internalType: "uint16",
+                    },
+                  ],
+                },
+                {
+                  name: "sweep",
+                  type: "tuple",
+                  internalType: "struct SweepParams",
+                  components: [
+                    {
+                      name: "interval",
+                      type: "uint32",
+                      internalType: "uint32",
+                    },
+                    {
+                      name: "maxOrders",
+                      type: "uint16",
+                      internalType: "uint16",
+                    },
+                    {
+                      name: "maxFills",
+                      type: "uint8",
+                      internalType: "uint8",
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+          outputs: [
+            {
+              name: "marketId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
+          name: "marketCount",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "uint32",
+              internalType: "uint32",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "minBudget",
+          inputs: [
+            {
+              name: "marketId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "side",
+              type: "uint8",
+              internalType: "enum Side",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "openOrders",
+          inputs: [
+            {
+              name: "marketId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "uint256[]",
+              internalType: "uint256[]",
             },
           ],
           stateMutability: "view",
@@ -146,6 +948,75 @@ const deployedContracts = {
         },
         {
           type: "function",
+          name: "pendingOwner",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "placeOrder",
+          inputs: [
+            {
+              name: "p",
+              type: "tuple",
+              internalType: "struct PlaceParams",
+              components: [
+                {
+                  name: "marketId",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "side",
+                  type: "uint8",
+                  internalType: "enum Side",
+                },
+                {
+                  name: "trigger",
+                  type: "uint8",
+                  internalType: "enum Trigger",
+                },
+                {
+                  name: "amountIn",
+                  type: "uint128",
+                  internalType: "uint128",
+                },
+                {
+                  name: "triggerPrice",
+                  type: "uint128",
+                  internalType: "uint128",
+                },
+                {
+                  name: "slippageBps",
+                  type: "uint16",
+                  internalType: "uint16",
+                },
+                {
+                  name: "expiry",
+                  type: "uint40",
+                  internalType: "uint40",
+                },
+              ],
+            },
+          ],
+          outputs: [
+            {
+              name: "orderId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "payable",
+        },
+        {
+          type: "function",
           name: "renounceOwnership",
           inputs: [],
           outputs: [],
@@ -153,20 +1024,167 @@ const deployedContracts = {
         },
         {
           type: "function",
-          name: "symbol",
+          name: "restartSweep",
+          inputs: [
+            {
+              name: "marketId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
+          name: "setCosts",
+          inputs: [
+            {
+              name: "costs_",
+              type: "tuple",
+              internalType: "struct Costs",
+              components: [
+                {
+                  name: "scheduleGas",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "sweepBaseGas",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "checkGas",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "fillGasHbarIn",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "fillGasTokenIn",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "settleGas",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "gasPriceTinycents",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "safetyBps",
+                  type: "uint16",
+                  internalType: "uint16",
+                },
+              ],
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
+          name: "surplus",
           inputs: [],
           outputs: [
             {
               name: "",
-              type: "string",
-              internalType: "string",
+              type: "uint256",
+              internalType: "uint256",
             },
           ],
           stateMutability: "view",
         },
         {
           type: "function",
-          name: "totalSupply",
+          name: "sweep",
+          inputs: [
+            {
+              name: "marketId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
+          name: "sweepGasLimit",
+          inputs: [
+            {
+              name: "marketId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "sweeps",
+          inputs: [
+            {
+              name: "marketId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "pendingSchedule",
+              type: "address",
+              internalType: "address",
+            },
+            {
+              name: "nextSweepAt",
+              type: "uint40",
+              internalType: "uint40",
+            },
+            {
+              name: "cursor",
+              type: "uint32",
+              internalType: "uint32",
+            },
+            {
+              name: "fundedOrders",
+              type: "uint32",
+              internalType: "uint32",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "topUp",
+          inputs: [
+            {
+              name: "orderId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [],
+          stateMutability: "payable",
+        },
+        {
+          type: "function",
+          name: "totalBudgets",
           inputs: [],
           outputs: [
             {
@@ -179,56 +1197,22 @@ const deployedContracts = {
         },
         {
           type: "function",
-          name: "transfer",
+          name: "totalCredits",
           inputs: [
             {
-              name: "to",
+              name: "token",
               type: "address",
               internalType: "address",
-            },
-            {
-              name: "value",
-              type: "uint256",
-              internalType: "uint256",
             },
           ],
           outputs: [
             {
               name: "",
-              type: "bool",
-              internalType: "bool",
-            },
-          ],
-          stateMutability: "nonpayable",
-        },
-        {
-          type: "function",
-          name: "transferFrom",
-          inputs: [
-            {
-              name: "from",
-              type: "address",
-              internalType: "address",
-            },
-            {
-              name: "to",
-              type: "address",
-              internalType: "address",
-            },
-            {
-              name: "value",
               type: "uint256",
               internalType: "uint256",
             },
           ],
-          outputs: [
-            {
-              name: "",
-              type: "bool",
-              internalType: "bool",
-            },
-          ],
-          stateMutability: "nonpayable",
+          stateMutability: "view",
         },
         {
           type: "function",
@@ -244,26 +1228,630 @@ const deployedContracts = {
           stateMutability: "nonpayable",
         },
         {
-          type: "event",
-          name: "Approval",
+          type: "function",
+          name: "updateMarket",
           inputs: [
             {
-              name: "owner",
-              type: "address",
-              indexed: true,
-              internalType: "address",
+              name: "marketId",
+              type: "uint256",
+              internalType: "uint256",
             },
             {
-              name: "spender",
-              type: "address",
-              indexed: true,
-              internalType: "address",
+              name: "guard",
+              type: "tuple",
+              internalType: "struct GuardParams",
+              components: [
+                {
+                  name: "twapWindow",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "maxDeviationBps",
+                  type: "uint16",
+                  internalType: "uint16",
+                },
+                {
+                  name: "maxOracleAge",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "maxSlippageBps",
+                  type: "uint16",
+                  internalType: "uint16",
+                },
+              ],
             },
             {
-              name: "value",
+              name: "sweepParams",
+              type: "tuple",
+              internalType: "struct SweepParams",
+              components: [
+                {
+                  name: "interval",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "maxOrders",
+                  type: "uint16",
+                  internalType: "uint16",
+                },
+                {
+                  name: "maxFills",
+                  type: "uint8",
+                  internalType: "uint8",
+                },
+              ],
+            },
+            {
+              name: "active",
+              type: "bool",
+              internalType: "bool",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
+          name: "valueAt",
+          inputs: [
+            {
+              name: "marketId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "side",
+              type: "uint8",
+              internalType: "enum Side",
+            },
+            {
+              name: "amountIn",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "price",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "withdrawSurplus",
+          inputs: [
+            {
+              name: "to",
+              type: "address",
+              internalType: "address payable",
+            },
+          ],
+          outputs: [],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "event",
+          name: "BudgetExhausted",
+          inputs: [
+            {
+              name: "orderId",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+            {
+              name: "budgetLeft",
               type: "uint256",
               indexed: false,
               internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "BudgetToppedUp",
+          inputs: [
+            {
+              name: "orderId",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+            {
+              name: "from",
+              type: "address",
+              indexed: true,
+              internalType: "address",
+            },
+            {
+              name: "amount",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+            {
+              name: "budget",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "Claimed",
+          inputs: [
+            {
+              name: "account",
+              type: "address",
+              indexed: true,
+              internalType: "address",
+            },
+            {
+              name: "token",
+              type: "address",
+              indexed: true,
+              internalType: "address",
+            },
+            {
+              name: "amount",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "CollectionCreated",
+          inputs: [
+            {
+              name: "collection",
+              type: "address",
+              indexed: false,
+              internalType: "address",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "CostsUpdated",
+          inputs: [
+            {
+              name: "costs",
+              type: "tuple",
+              indexed: false,
+              internalType: "struct Costs",
+              components: [
+                {
+                  name: "scheduleGas",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "sweepBaseGas",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "checkGas",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "fillGasHbarIn",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "fillGasTokenIn",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "settleGas",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "gasPriceTinycents",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "safetyBps",
+                  type: "uint16",
+                  internalType: "uint16",
+                },
+              ],
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "Credited",
+          inputs: [
+            {
+              name: "account",
+              type: "address",
+              indexed: true,
+              internalType: "address",
+            },
+            {
+              name: "token",
+              type: "address",
+              indexed: true,
+              internalType: "address",
+            },
+            {
+              name: "amount",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "FillFailed",
+          inputs: [
+            {
+              name: "orderId",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+            {
+              name: "reason",
+              type: "bytes",
+              indexed: false,
+              internalType: "bytes",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "FillHeld",
+          inputs: [
+            {
+              name: "orderId",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+            {
+              name: "reason",
+              type: "uint8",
+              indexed: false,
+              internalType: "enum GuardState",
+            },
+            {
+              name: "oraclePrice",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+            {
+              name: "poolPrice",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "MarketListed",
+          inputs: [
+            {
+              name: "marketId",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+            {
+              name: "base",
+              type: "address",
+              indexed: false,
+              internalType: "address",
+            },
+            {
+              name: "quote",
+              type: "address",
+              indexed: false,
+              internalType: "address",
+            },
+            {
+              name: "pool",
+              type: "address",
+              indexed: false,
+              internalType: "address",
+            },
+            {
+              name: "poolFee",
+              type: "uint24",
+              indexed: false,
+              internalType: "uint24",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "MarketUpdated",
+          inputs: [
+            {
+              name: "marketId",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "NftSettlementFailed",
+          inputs: [
+            {
+              name: "orderId",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+            {
+              name: "responseCode",
+              type: "int64",
+              indexed: false,
+              internalType: "int64",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "OrderCancelled",
+          inputs: [
+            {
+              name: "orderId",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+            {
+              name: "holder",
+              type: "address",
+              indexed: true,
+              internalType: "address",
+            },
+            {
+              name: "refund",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+            {
+              name: "budgetRefund",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "OrderChecked",
+          inputs: [
+            {
+              name: "orderId",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+            {
+              name: "charged",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+            {
+              name: "budgetLeft",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "OrderExpired",
+          inputs: [
+            {
+              name: "orderId",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+            {
+              name: "holder",
+              type: "address",
+              indexed: true,
+              internalType: "address",
+            },
+            {
+              name: "refund",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+            {
+              name: "budgetRefund",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "OrderFilled",
+          inputs: [
+            {
+              name: "orderId",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+            {
+              name: "holder",
+              type: "address",
+              indexed: true,
+              internalType: "address",
+            },
+            {
+              name: "amountIn",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+            {
+              name: "amountOut",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+            {
+              name: "minAmountOut",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+            {
+              name: "oraclePrice",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+            {
+              name: "poolPrice",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+            {
+              name: "budgetRefund",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "OrderPlaced",
+          inputs: [
+            {
+              name: "orderId",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+            {
+              name: "marketId",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+            {
+              name: "maker",
+              type: "address",
+              indexed: true,
+              internalType: "address",
+            },
+            {
+              name: "side",
+              type: "uint8",
+              indexed: false,
+              internalType: "enum Side",
+            },
+            {
+              name: "trigger",
+              type: "uint8",
+              indexed: false,
+              internalType: "enum Trigger",
+            },
+            {
+              name: "amountIn",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+            {
+              name: "triggerPrice",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+            {
+              name: "slippageBps",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+            {
+              name: "expiry",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+            {
+              name: "budget",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "OwnershipTransferStarted",
+          inputs: [
+            {
+              name: "previousOwner",
+              type: "address",
+              indexed: true,
+              internalType: "address",
+            },
+            {
+              name: "newOwner",
+              type: "address",
+              indexed: true,
+              internalType: "address",
             },
           ],
           anonymous: false,
@@ -289,14 +1877,8 @@ const deployedContracts = {
         },
         {
           type: "event",
-          name: "Transfer",
+          name: "SurplusWithdrawn",
           inputs: [
-            {
-              name: "from",
-              type: "address",
-              indexed: true,
-              internalType: "address",
-            },
             {
               name: "to",
               type: "address",
@@ -304,7 +1886,94 @@ const deployedContracts = {
               internalType: "address",
             },
             {
-              name: "value",
+              name: "amount",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "SweepExecuted",
+          inputs: [
+            {
+              name: "marketId",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+            {
+              name: "scheduled",
+              type: "bool",
+              indexed: false,
+              internalType: "bool",
+            },
+            {
+              name: "guard",
+              type: "uint8",
+              indexed: false,
+              internalType: "enum GuardState",
+            },
+            {
+              name: "checked",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+            {
+              name: "filled",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+            {
+              name: "openOrders",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "SweepScheduleFailed",
+          inputs: [
+            {
+              name: "marketId",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+            {
+              name: "responseCode",
+              type: "int64",
+              indexed: false,
+              internalType: "int64",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "SweepScheduled",
+          inputs: [
+            {
+              name: "marketId",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+            {
+              name: "schedule",
+              type: "address",
+              indexed: false,
+              internalType: "address",
+            },
+            {
+              name: "executeAt",
               type: "uint256",
               indexed: false,
               internalType: "uint256",
@@ -314,20 +1983,36 @@ const deployedContracts = {
         },
         {
           type: "error",
-          name: "ERC20InsufficientAllowance",
+          name: "AlreadyInitialized",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "HtsError",
           inputs: [
             {
-              name: "spender",
-              type: "address",
-              internalType: "address",
+              name: "operation",
+              type: "uint8",
+              internalType: "enum OrderVault.HtsOperation",
             },
             {
-              name: "allowance",
+              name: "responseCode",
+              type: "int64",
+              internalType: "int64",
+            },
+          ],
+        },
+        {
+          type: "error",
+          name: "InsufficientBudget",
+          inputs: [
+            {
+              name: "provided",
               type: "uint256",
               internalType: "uint256",
             },
             {
-              name: "needed",
+              name: "required",
               type: "uint256",
               internalType: "uint256",
             },
@@ -335,66 +2020,138 @@ const deployedContracts = {
         },
         {
           type: "error",
-          name: "ERC20InsufficientBalance",
+          name: "InvalidAmount",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "InvalidCosts",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "InvalidExpiry",
+          inputs: [
+            {
+              name: "expiry",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+        },
+        {
+          type: "error",
+          name: "InvalidGuard",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "InvalidMarket",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "InvalidSlippage",
+          inputs: [
+            {
+              name: "slippageBps",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "minBps",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "maxBps",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+        },
+        {
+          type: "error",
+          name: "InvalidSweep",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "InvalidTrigger",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "MarketInactive",
+          inputs: [
+            {
+              name: "marketId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+        },
+        {
+          type: "error",
+          name: "NoFundedOrders",
+          inputs: [
+            {
+              name: "marketId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+        },
+        {
+          type: "error",
+          name: "NotHolder",
+          inputs: [
+            {
+              name: "orderId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "caller",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+        },
+        {
+          type: "error",
+          name: "NotInitialized",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "NotRouter",
           inputs: [
             {
               name: "sender",
               type: "address",
               internalType: "address",
             },
+          ],
+        },
+        {
+          type: "error",
+          name: "NothingToClaim",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "OnlySelf",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "OrderNotOpen",
+          inputs: [
             {
-              name: "balance",
+              name: "orderId",
               type: "uint256",
               internalType: "uint256",
-            },
-            {
-              name: "needed",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-        },
-        {
-          type: "error",
-          name: "ERC20InvalidApprover",
-          inputs: [
-            {
-              name: "approver",
-              type: "address",
-              internalType: "address",
-            },
-          ],
-        },
-        {
-          type: "error",
-          name: "ERC20InvalidReceiver",
-          inputs: [
-            {
-              name: "receiver",
-              type: "address",
-              internalType: "address",
-            },
-          ],
-        },
-        {
-          type: "error",
-          name: "ERC20InvalidSender",
-          inputs: [
-            {
-              name: "sender",
-              type: "address",
-              internalType: "address",
-            },
-          ],
-        },
-        {
-          type: "error",
-          name: "ERC20InvalidSpender",
-          inputs: [
-            {
-              name: "spender",
-              type: "address",
-              internalType: "address",
             },
           ],
         },
@@ -420,166 +2177,78 @@ const deployedContracts = {
             },
           ],
         },
-      ],
-      inheritedFunctions: {},
-      deployedOnBlock: 33578755,
-    },
-    HtsTokenCreator: {
-      address: "0x03fcda15d3955b20557028db9fabe6f5847f00ab",
-      abi: [
         {
-          type: "function",
-          name: "HTS",
+          type: "error",
+          name: "ReentrancyGuardReentrantCall",
           inputs: [],
-          outputs: [
-            {
-              name: "",
-              type: "address",
-              internalType: "address",
-            },
-          ],
-          stateMutability: "view",
         },
         {
-          type: "function",
-          name: "SUCCESS",
-          inputs: [],
-          outputs: [
-            {
-              name: "",
-              type: "int64",
-              internalType: "int64",
-            },
-          ],
-          stateMutability: "view",
-        },
-        {
-          type: "function",
-          name: "createToken",
+          type: "error",
+          name: "SafeCastOverflowedUintDowncast",
           inputs: [
             {
-              name: "name",
-              type: "string",
-              internalType: "string",
-            },
-            {
-              name: "symbol",
-              type: "string",
-              internalType: "string",
-            },
-            {
-              name: "initialSupply",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
-              name: "decimals",
+              name: "bits",
               type: "uint8",
               internalType: "uint8",
             },
-          ],
-          outputs: [
             {
-              name: "tokenAddress",
-              type: "address",
-              internalType: "address",
-            },
-          ],
-          stateMutability: "payable",
-        },
-        {
-          type: "function",
-          name: "mintToken",
-          inputs: [
-            {
-              name: "token",
-              type: "address",
-              internalType: "address",
-            },
-            {
-              name: "amount",
+              name: "value",
               type: "uint256",
               internalType: "uint256",
             },
           ],
-          outputs: [
-            {
-              name: "newTotalSupply",
-              type: "int64",
-              internalType: "int64",
-            },
-          ],
-          stateMutability: "nonpayable",
-        },
-        {
-          type: "event",
-          name: "TokenCreated",
-          inputs: [
-            {
-              name: "tokenAddress",
-              type: "address",
-              indexed: true,
-              internalType: "address",
-            },
-            {
-              name: "name",
-              type: "string",
-              indexed: false,
-              internalType: "string",
-            },
-            {
-              name: "symbol",
-              type: "string",
-              indexed: false,
-              internalType: "string",
-            },
-          ],
-          anonymous: false,
-        },
-        {
-          type: "event",
-          name: "TokenMinted",
-          inputs: [
-            {
-              name: "tokenAddress",
-              type: "address",
-              indexed: true,
-              internalType: "address",
-            },
-            {
-              name: "newTotalSupply",
-              type: "int64",
-              indexed: false,
-              internalType: "int64",
-            },
-          ],
-          anonymous: false,
         },
         {
           type: "error",
-          name: "HtsCreateFailed",
+          name: "SweepAlive",
           inputs: [
             {
-              name: "responseCode",
-              type: "int64",
-              internalType: "int64",
+              name: "marketId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "nextSweepAt",
+              type: "uint256",
+              internalType: "uint256",
             },
           ],
         },
         {
           type: "error",
-          name: "HtsMintFailed",
+          name: "TransferFailed",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "UnknownMarket",
           inputs: [
             {
-              name: "responseCode",
-              type: "int64",
-              internalType: "int64",
+              name: "marketId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+        },
+        {
+          type: "error",
+          name: "WrongValue",
+          inputs: [
+            {
+              name: "sent",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "expected",
+              type: "uint256",
+              internalType: "uint256",
             },
           ],
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 33578759,
+      deployedOnBlock: 41144246,
     },
   },
 } as const;
