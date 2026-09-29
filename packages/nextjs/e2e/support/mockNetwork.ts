@@ -15,6 +15,8 @@ import {
 import type { Page, Route } from "@playwright/test";
 import {
   type Abi,
+  type AbiFunction,
+  type AbiParameter,
   decodeFunctionData,
   encodeAbiParameters,
   encodeErrorResult,
@@ -25,6 +27,7 @@ import {
   pad,
   toFunctionSelector,
   toHex,
+  zeroAddress,
 } from "viem";
 
 const vault = deployedContracts[296].OrderVault;
@@ -33,6 +36,7 @@ const VAULT = vault.address.toLowerCase();
 const RPC = "https://testnet.hashio.io/api";
 const MIRROR = "https://testnet.mirrornode.hedera.com";
 const GAS_PRICE = 1_090_000_000_000n; // 109 tinybar per gas, in weibar
+const ROUTER = "0x0000000000000000000000000000000000159398";
 
 const MARKETS = {
   1: {
@@ -77,7 +81,8 @@ const MARKETS = {
  * Costs as the reference vault reported them on testnet (tinybar), and the vault's sharing rule:
  * each order pays an even share of the sweep's fixed gas plus its own check gas.
  */
-const COSTS = { checkCost: 189_774_952n, fillHbarIn: 69_060_000n, fillTokenIn: 105_096_888n };
+// checkCost, fillCost and minBudget as the live vault 0.0.10779995 returned them on 2026-09-30.
+const COSTS = { checkCost: 189_774_952n, fillHbarIn: 69_063_669n, fillTokenIn: 105_096_888n };
 const FIXED_GAS = 1_520_000n;
 const CHECK_GAS = 60_000n;
 const checkShared = (orders: bigint) => {
@@ -87,6 +92,21 @@ const checkShared = (orders: bigint) => {
 };
 const minBudget = (side: number, marketId: number) =>
   (marketId === 1 && side === 0 ? COSTS.fillHbarIn : COSTS.fillTokenIn) + 6n * COSTS.checkCost;
+
+/** Zero value of an ABI parameter, for the views only the Debug page reads. */
+const zeroOf = (param: AbiParameter): unknown => {
+  if (param.type.endsWith("]")) return [];
+  if (param.type === "tuple") {
+    const { components } = param as { components: readonly AbiParameter[] };
+    return Object.fromEntries(components.map(c => [c.name, zeroOf(c)]));
+  }
+  if (param.type === "address") return zeroAddress;
+  if (param.type === "bool") return false;
+  if (param.type === "string") return "";
+  if (param.type === "bytes") return "0x";
+  if (param.type.startsWith("bytes")) return pad("0x0", { size: Number(param.type.slice(5)) });
+  return 0n;
+};
 
 const vaultCall = (s: Scenario, data: `0x${string}`) => {
   const { functionName, args = [] } = decodeFunctionData({ abi: vaultAbi, data });
@@ -130,9 +150,17 @@ const vaultCall = (s: Scenario, data: `0x${string}`) => {
       );
     }
     case "holderOf":
+      return result(s.holders[String(a[0])] ?? ACCOUNT);
+    case "owner":
       return result(ACCOUNT);
-    default:
-      throw new Error(`mock has no answer for OrderVault.${functionName}`);
+    case "ROUTER":
+      return result(ROUTER);
+    case "WHBAR":
+      return result(WHBAR);
+    default: {
+      const { outputs } = vaultAbi.find(i => i.type === "function" && i.name === functionName) as AbiFunction;
+      return result(outputs.length === 1 ? zeroOf(outputs[0]) : outputs.map(zeroOf));
+    }
   }
 };
 
@@ -293,6 +321,9 @@ const rpc = (s: Scenario, method: string, params: any[]): { result?: unknown; er
     }
     case "eth_getTransactionByHash":
       return { result: null };
+    case "eth_getCode":
+      // The Debug page only checks that code exists at the vault address.
+      return { result: String(params[0]).toLowerCase() === VAULT ? "0x6080604052" : "0x" };
     default:
       return { error: { code: -32601, message: `mock RPC does not support ${method}` } };
   }

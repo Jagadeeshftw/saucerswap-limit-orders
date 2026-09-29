@@ -7,7 +7,7 @@ import { useAccount } from "wagmi";
 import { MirrorLagNotice, StatusBadge } from "~~/components/orders/StatusBits";
 import { legs } from "~~/hooks/orders/useMarkets";
 import { type OrderView, useCollectionId, useMyOrders } from "~~/hooks/orders/useOrders";
-import { comparatorText, isOpen, orderKind } from "~~/utils/orders/orders";
+import { comparatorText, describeOrder, isOpen } from "~~/utils/orders/orders";
 import { formatAmount, formatHbar, formatPrice } from "~~/utils/orders/units";
 
 type Filter = "all" | "open" | "filled" | "closed";
@@ -22,7 +22,13 @@ const matches = (order: OrderView, filter: Filter) => {
 const describe = (o: OrderView) => {
   const { input } = legs(o.market, o.side);
   return {
-    what: `${orderKind(o.side, o.trigger)} ${formatAmount(o.amountIn, input.decimals)} ${input.symbol}`,
+    what: describeOrder(
+      o.side,
+      o.trigger,
+      formatAmount(o.amountIn, input.decimals),
+      o.market.base.symbol,
+      o.market.quote.symbol,
+    ),
     trigger: `${o.market.base.symbol} ${comparatorText(o.trigger)} ${formatPrice(o.triggerPrice)} ${o.market.quote.symbol}`,
     budget: isOpen(o.display) ? `${formatHbar(o.budget)} budget` : "settled",
   };

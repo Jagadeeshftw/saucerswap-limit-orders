@@ -100,6 +100,12 @@ export const orderKind = (side: Side, trigger: Trigger) => {
   return trigger === Trigger.AtOrBelow ? "Limit buy" : "Stop-buy";
 };
 
+/** "Limit sell 20 HBAR", "Limit buy HBAR with 50 USDC": names the token bought, not only the one spent. */
+export const describeOrder = (side: Side, trigger: Trigger, amount: string, base: string, quote: string) =>
+  side === Side.SellBase
+    ? `${orderKind(side, trigger)} ${amount} ${base}`
+    : `${orderKind(side, trigger)} ${base} with ${amount} ${quote}`;
+
 export type OrderKind = "limit" | "stop";
 
 /** Ticket choice to contract comparator: a sell limit fires on the way up, a sell stop on the way down; buys mirror it. */

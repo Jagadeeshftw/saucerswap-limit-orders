@@ -10,7 +10,7 @@ import { legs, useContractEntityId } from "~~/hooks/orders/useMarkets";
 import { useCollectionId, useOrder, useOrderTrail } from "~~/hooks/orders/useOrders";
 import { vault } from "~~/hooks/orders/useVault";
 import { useVaultTx } from "~~/hooks/orders/useVaultTx";
-import { comparatorText, isOpen, orderKind } from "~~/utils/orders/orders";
+import { comparatorText, describeOrder, isOpen } from "~~/utils/orders/orders";
 import type { TrailEntry } from "~~/utils/orders/trail";
 import { formatAmount, formatHbar, formatPrice, parseAmount, tinybarToWeibar } from "~~/utils/orders/units";
 
@@ -86,8 +86,14 @@ const OrderDetail = () => {
           <StatusBadge status={order.display} />
         </div>
         <p className="m-0 text-sm text-base-content/70">
-          {orderKind(order.side, order.trigger)} {formatAmount(order.amountIn, input.decimals)} {input.symbol} when{" "}
-          {order.market.base.symbol} is {comparatorText(order.trigger)} {formatPrice(order.triggerPrice)}{" "}
+          {describeOrder(
+            order.side,
+            order.trigger,
+            formatAmount(order.amountIn, input.decimals),
+            order.market.base.symbol,
+            order.market.quote.symbol,
+          )}{" "}
+          when {order.market.base.symbol} is {comparatorText(order.trigger)} {formatPrice(order.triggerPrice)}{" "}
           {order.market.quote.symbol}
         </p>
       </div>
@@ -100,6 +106,12 @@ const OrderDetail = () => {
           </h2>
           {trail.error && <p className="m-0 text-sm text-error">Could not load the trail: {trail.error.message}</p>}
           {trail.isLoading && <p className="m-0 text-sm text-base-content/70">Loading events…</p>}
+          {trail.data?.length === 0 && (
+            <p className="m-0 text-sm text-base-content/70" data-testid="trail-empty">
+              The mirror node has no events for this order yet. A new order&apos;s events usually appear within a few
+              seconds.
+            </p>
+          )}
           <ol className="m-0 grid list-none p-0" data-testid="trail">
             {trail.data?.map(entry => (
               <li

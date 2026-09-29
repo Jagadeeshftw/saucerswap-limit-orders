@@ -3,9 +3,11 @@
 import React, { useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bars3Icon, BugAntIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
+import { ArrowTopRightOnSquareIcon, Bars3Icon, BugAntIcon } from "@heroicons/react/24/outline";
 import { NetworkPill } from "~~/components/orders/StatusBits";
 import { RainbowKitCustomConnectButton } from "~~/components/scaffold-hbar";
+import { useContractEntityId } from "~~/hooks/orders/useMarkets";
+import { vault } from "~~/hooks/orders/useVault";
 import { useOutsideClick } from "~~/hooks/scaffold-hbar";
 
 type HeaderMenuLink = {
@@ -28,15 +30,13 @@ export const menuLinks: HeaderMenuLink[] = [
     href: "/debug",
     icon: <BugAntIcon className="h-4 w-4" />,
   },
-  {
-    label: "Block Explorer",
-    href: "/blockexplorer",
-    icon: <MagnifyingGlassIcon className="h-4 w-4" />,
-  },
 ];
+
+const linkClass = "py-1.5 px-3 text-sm rounded-full gap-2 grid grid-flow-col";
 
 export const HeaderMenuLinks = () => {
   const pathname = usePathname();
+  const vaultId = useContractEntityId(vault.address);
 
   return (
     <>
@@ -47,9 +47,7 @@ export const HeaderMenuLinks = () => {
             <Link
               href={href}
               passHref
-              className={`${
-                isActive ? "bg-primary/10 text-primary font-semibold" : "hover:bg-primary/5"
-              } py-1.5 px-3 text-sm rounded-full gap-2 grid grid-flow-col`}
+              className={`${isActive ? "bg-primary/10 text-primary font-semibold" : "hover:bg-primary/5"} ${linkClass}`}
             >
               {icon}
               <span>{label}</span>
@@ -57,6 +55,18 @@ export const HeaderMenuLinks = () => {
           </li>
         );
       })}
+      <li>
+        {/* The scaffold's block explorer only reads local chains; on Hedera the vault's history lives on HashScan. */}
+        <a
+          href={`https://hashscan.io/testnet/contract/${vaultId ?? vault.address}`}
+          target="_blank"
+          rel="noreferrer"
+          className={`hover:bg-primary/5 ${linkClass}`}
+        >
+          <span>Vault on HashScan</span>
+          <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+        </a>
+      </li>
     </>
   );
 };

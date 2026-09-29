@@ -193,6 +193,12 @@ test.describe("My orders", () => {
     await capture(page, info, "15-my-orders-empty");
   });
 
+  test("asks for a wallet before listing orders", async ({ page }, info) => {
+    await open(page, withOrderBook(baseScenario()), "/orders", { connect: false });
+    await expect(page.getByText("Connect a wallet to see the orders it holds.")).toBeVisible();
+    await capture(page, info, "23-my-orders-disconnected");
+  });
+
   test("warns when the mirror node is behind", async ({ page }, info) => {
     const s = withOrderBook(baseScenario());
     s.mirrorLagSeconds = 45;
@@ -222,6 +228,53 @@ test.describe("Order detail", () => {
     await expect(page.getByTestId("order-actions")).toHaveCount(0);
     await capture(page, info, "18-order-filled");
   });
+
+  test("asks for a top-up when the budget only covers the fill", async ({ page }, info) => {
+    const s = withOrderBook(baseScenario());
+    await open(page, s, "/orders/11");
+    await expect(page.getByText("Budget empty").first()).toBeVisible();
+    await expect(page.getByText("Limit buy HBAR with 50 USDC when HBAR is at or below 0.0980 USDC")).toBeVisible();
+    await expect(page.getByTestId("order-actions")).toContainText("Checks are paused");
+    await capture(page, info, "20-order-budget-empty");
+    await page.locator("#top-up").fill("5");
+    await page.getByRole("button", { name: "Top up" }).click();
+    await expect(page.getByTestId("tx-status")).toContainText("Done.");
+    expect(BigInt(s.sent.at(-1)!.value)).toBe(5n * 10n ** 18n);
+  });
+
+  test("says when the mirror node has no events for an order yet", async ({ page }, info) => {
+    await open(page, withOrderBook(baseScenario()), "/orders/14");
+    await expect(page.getByTestId("trail-empty")).toBeVisible();
+    await capture(page, info, "21-order-trail-empty");
+  });
+
+  test("lets only the NFT holder cancel", async ({ page }, info) => {
+    const s = withOrderBook(baseScenario());
+    s.holders["13"] = "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc";
+    await open(page, s, "/orders/13");
+    await expect(page.getByTestId("order-actions")).toContainText("Only the NFT holder can cancel this order.");
+    await expect(page.getByRole("button", { name: "Cancel and refund" })).toHaveCount(0);
+    await capture(page, info, "26-order-not-holder");
+  });
+
+  test("explains an order id that does not exist", async ({ page }, info) => {
+    await open(page, withOrderBook(baseScenario()), "/orders/999");
+    await expect(page.getByRole("heading", { name: "Order not found" })).toBeVisible();
+    await capture(page, info, "22-order-not-found");
+  });
+});
+
+test("the Debug page lists the vault's functions", async ({ page }, info) => {
+  await open(page, baseScenario(), "/debug");
+  await expect(page.getByText("OrderVault").first()).toBeVisible();
+  await expect(page.getByText("placeOrder").first()).toBeVisible();
+  await capture(page, info, "24-debug");
+});
+
+test("unknown pages get a 404 with a way home", async ({ page }, info) => {
+  await open(page, baseScenario(), "/no-such-page", { connect: false });
+  await expect(page.getByRole("heading", { name: "Page Not Found" })).toBeVisible();
+  await capture(page, info, "25-not-found");
 });
 
 test("the mobile menu opens the navigation", async ({ page }, info) => {
@@ -229,7 +282,7 @@ test("the mobile menu opens the navigation", async ({ page }, info) => {
   await open(page, baseScenario(), "/", { connect: false });
   await page.getByTestId("burger").click();
   const menu = page.locator("details[open] ul");
-  for (const label of ["Trade", "My orders", "Debug Contracts", "Block Explorer"]) {
+  for (const label of ["Trade", "My orders", "Debug Contracts", "Vault on HashScan"]) {
     await expect(menu.getByRole("link", { name: label })).toBeVisible();
   }
   await capture(page, info, "19-mobile-menu");

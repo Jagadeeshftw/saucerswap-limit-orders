@@ -4,8 +4,7 @@
     "/?market=2",
     "/orders",
     "/orders/1",
-    "/debug",
-    "/blockexplorer"
+    "/debug"
   ],
   "testnetProofs": [
     {

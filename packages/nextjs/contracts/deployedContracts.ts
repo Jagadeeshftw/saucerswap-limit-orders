@@ -6,35 +6,6 @@ import { GenericContractsDeclaration } from "~~/utils/scaffold-hbar/contract";
 
 const deployedContracts = {
   296: {
-    MarketGuard: {
-      address: "0xe2f1e740d362a1ca4a02366054c39907ab160f5d",
-      abi: [
-        {
-          type: "error",
-          name: "SafeCastOverflowedIntToUint",
-          inputs: [
-            {
-              name: "value",
-              type: "int256",
-              internalType: "int256",
-            },
-          ],
-        },
-        {
-          type: "error",
-          name: "TickOutOfRange",
-          inputs: [
-            {
-              name: "tick",
-              type: "int24",
-              internalType: "int24",
-            },
-          ],
-        },
-      ],
-      inheritedFunctions: {},
-      deployedOnBlock: 41144244,
-    },
     OrderVault: {
       address: "0xf50e10ab7b6b9b71d4d74464a5df2e0d764353d1",
       abi: [

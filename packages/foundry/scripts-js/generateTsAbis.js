@@ -44,6 +44,10 @@ function parseTransactionAndReceiptRun(filePath) {
     return {
       transactions: broadcastData.transactions || [],
       receipts: broadcastData.receipts || [],
+      // Entries look like "path:Name:0xaddress".
+      libraries: (broadcastData.libraries || []).map((entry) =>
+        entry.split(":").pop().toLowerCase(),
+      ),
     };
   } catch (error) {
     console.warn(`Warning: Could not parse ${filePath}:`, error.message);
@@ -71,11 +75,15 @@ function getDeploymentHistory(broadcastPath) {
     });
 
   for (const file of runFiles) {
-    const { transactions, receipts } = parseTransactionAndReceiptRun(
-      join(broadcastPath, file),
-    );
+    const {
+      transactions,
+      receipts,
+      libraries = [],
+    } = parseTransactionAndReceiptRun(join(broadcastPath, file));
 
     for (const tx of transactions) {
+      // Linked libraries are deployed like contracts, but their functions can't be called on their own.
+      if (libraries.includes(tx.contractAddress?.toLowerCase())) continue;
       if (tx.transactionType === "CREATE" || tx.transactionType === "CREATE2") {
         // Store or update contract deployment info
         deploymentHistory.set(tx.contractAddress, {

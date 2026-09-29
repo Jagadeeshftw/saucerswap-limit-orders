@@ -6,6 +6,7 @@ import {
   type Order,
   Side,
   Trigger,
+  describeOrder,
   displayStatus,
   isOpen,
   newestFirst,
@@ -72,6 +73,11 @@ describe("order kinds", () => {
     expect(orderKind(Side.SellBase, Trigger.AtOrBelow)).toBe("Stop-loss");
     expect(orderKind(Side.BuyBase, Trigger.AtOrBelow)).toBe("Limit buy");
     expect(orderKind(Side.BuyBase, Trigger.AtOrAbove)).toBe("Stop-buy");
+  });
+
+  it("names the token a buy order gets, not only the one it spends", () => {
+    expect(describeOrder(Side.SellBase, Trigger.AtOrAbove, "20", "HBAR", "USDC")).toBe("Limit sell 20 HBAR");
+    expect(describeOrder(Side.BuyBase, Trigger.AtOrBelow, "50", "HBAR", "USDC")).toBe("Limit buy HBAR with 50 USDC");
   });
 });
 

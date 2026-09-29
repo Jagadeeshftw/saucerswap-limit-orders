@@ -55,6 +55,8 @@ export type Scenario = {
   fundedOrders: Record<number, number>;
   orders: Record<string, ScenarioOrder>;
   held: number[];
+  /** NFT holder per order id, where it is not the connected account. */
+  holders: Record<string, string>;
   logs: Record<string, unknown[]>;
   mirrorLagSeconds: number;
   send: SendOutcome;
@@ -94,6 +96,7 @@ export const baseScenario = (): Scenario => ({
   fundedOrders: { 1: 1, 2: 0 },
   orders: {},
   held: [],
+  holders: {},
   logs: {},
   mirrorLagSeconds: 2,
   send: { kind: "success" },
