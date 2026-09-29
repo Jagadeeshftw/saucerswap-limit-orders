@@ -35,5 +35,15 @@ jobs:
       - name: Contract tests
         run: yarn foundry:test
 
+      - name: Frontend unit tests
+        run: yarn next:test
+
       - name: Build frontend
         run: yarn next:build
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+        working-directory: packages/nextjs
+
+      - name: End-to-end tests (desktop and mobile, mocked network)
+        run: yarn next:test:e2e

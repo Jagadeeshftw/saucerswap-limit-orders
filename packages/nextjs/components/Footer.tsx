@@ -15,33 +15,29 @@ export const Footer = () => {
   const { price: nativeCurrencyPrice } = useFetchHbarPrice();
 
   return (
-    <div className="min-h-0 py-5 px-1 mb-11 lg:mb-0">
-      <div>
-        <div className="fixed flex justify-between items-center w-full z-10 p-4 bottom-0 left-0 pointer-events-none">
-          <div className="flex flex-col md:flex-row gap-2 pointer-events-auto">
-            {nativeCurrencyPrice > 0 && (
-              <div>
-                <div className="btn btn-primary btn-sm font-normal gap-1 cursor-auto">
-                  <CurrencyDollarIcon className="h-4 w-4" />
-                  <span>{nativeCurrencyPrice.toFixed(2)}</span>
-                </div>
-              </div>
-            )}
-            {isTestnet && <HederaPortalFaucet showIcon />}
-          </div>
-          <SwitchTheme className="pointer-events-auto" />
+    <footer className="grid min-h-0 gap-2 px-4 py-5">
+      <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-2">
+          {nativeCurrencyPrice > 0 && (
+            <span className="btn btn-primary btn-sm cursor-auto gap-1 font-normal">
+              <CurrencyDollarIcon className="h-4 w-4" />
+              <span>{nativeCurrencyPrice.toFixed(2)}</span>
+            </span>
+          )}
+          {isTestnet && <HederaPortalFaucet showIcon />}
         </div>
+        <SwitchTheme />
       </div>
       <div className="w-full">
         <ul className="menu menu-horizontal w-full">
           <div className="flex justify-center items-center gap-3 text-sm w-full text-base-content/60">
             <a
-              href="https://github.com/hedera-dev/scaffold-hbar"
+              href="https://github.com/Jagadeeshftw/saucerswap-limit-orders"
               target="_blank"
               rel="noreferrer"
               className="link hover:text-primary"
             >
-              GitHub
+              Source
             </a>
             <span className="opacity-30">|</span>
             <span>
@@ -62,6 +58,6 @@ export const Footer = () => {
           </div>
         </ul>
       </div>
-    </div>
+    </footer>
   );
 };

@@ -60,7 +60,6 @@ jobs:
           --template ${{ github.repository }}#${{ github.sha }}
           --frameworks ${{ matrix.framework }}
           --pms ${{ matrix.pm }}
-          --allow-pending-proof
 
       - name: Upload gate report
         if: always()

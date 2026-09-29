@@ -1,4 +1,21 @@
 {
-  "routes": ["/", "/debug", "/blockexplorer"],
-  "testnetProofs": []
+  "routes": [
+    "/",
+    "/?market=2",
+    "/orders",
+    "/orders/1",
+    "/debug",
+    "/blockexplorer"
+  ],
+  "testnetProofs": [
+    {
+      "id": "0x54f17eeccf9975e84d33afefc14979ff2ee2d7d9c36f3d19d4dec53cadcc05ee",
+      "description": "OrderVault.placeOrder: DAI order escrowed, order NFT minted, sweep scheduled"
+    },
+    {
+      "id": "0.0.7314364-1790702927-890142523",
+      "scheduled": true,
+      "description": "Scheduled sweep run by the Hedera Schedule Service fills the order on SaucerSwap V2"
+    }
+  ]
 }

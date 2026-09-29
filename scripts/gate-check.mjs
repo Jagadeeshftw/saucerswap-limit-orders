@@ -328,11 +328,12 @@ async function secretScan(scope, args, logFile, env) {
   record(scope, "secret scan (gitleaks)", code === 0 ? "pass" : "fail", code === 0 ? "" : tail(output, 5));
 }
 
-function mirrorTxPath(id) {
+function mirrorTxPath(id, scheduled) {
   if (/^0x[0-9a-fA-F]{64}$/.test(id)) return `contracts/results/${id}`;
   const match = id.match(/^(\d+\.\d+\.\d+)[@-](\d+)[.-](\d+)$/);
   if (!match) throw new Error(`unrecognised transaction id ${id}`);
-  return `transactions/${match[1]}-${match[2]}-${match[3]}`;
+  // A scheduled transaction shares its id with the one that created the schedule.
+  return `transactions/${match[1]}-${match[2]}-${match[3]}${scheduled ? "?scheduled=true" : ""}`;
 }
 
 async function checkTestnetProofs(allowPending) {
@@ -341,7 +342,7 @@ async function checkTestnetProofs(allowPending) {
     return;
   }
   for (const proof of CONFIG.testnetProofs) {
-    const url = `https://testnet.mirrornode.hedera.com/api/v1/${mirrorTxPath(proof.id)}`;
+    const url = `https://testnet.mirrornode.hedera.com/api/v1/${mirrorTxPath(proof.id, proof.scheduled)}`;
     const body = await fetch(url).then(r => (r.ok ? r.json() : null));
     const result = body?.transactions?.[0]?.result ?? body?.result;
     record("proof", `${proof.description} (${proof.id})`, result === "SUCCESS" ? "pass" : "fail", `mirror node result: ${result ?? "not found"}`);

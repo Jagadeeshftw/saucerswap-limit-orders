@@ -8,9 +8,6 @@ import { readFileSync } from "fs";
 import { parse } from "toml";
 import { ethers } from "ethers";
 
-const ALCHEMY_API_KEY =
-  process.env.ALCHEMY_API_KEY || "oKxs-03sij-U_N0iOlrSsZFr29-IqbuF";
-
 // Load environment variables
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -28,16 +25,11 @@ async function getBalanceForEachNetwork(address) {
     // Extract rpc_endpoints from parsedToml
     const rpcEndpoints = parsedToml.rpc_endpoints;
 
-    // Replace placeholders in the rpc_endpoints section
-    function replaceENVAlchemyKey(input) {
-      return input.replace("${ALCHEMY_API_KEY}", ALCHEMY_API_KEY);
-    }
-
     console.log(await toString(address, { type: "terminal", small: true }));
     console.log(`\n📊 Address: ${address}`);
 
     for (const networkName in rpcEndpoints) {
-      const networkUrl = replaceENVAlchemyKey(rpcEndpoints[networkName]);
+      const networkUrl = rpcEndpoints[networkName];
       console.log(`\n--${networkName}-- 📡`);
 
       try {
