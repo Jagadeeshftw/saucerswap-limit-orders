@@ -1,6 +1,6 @@
 {
-  "name": "scaffold-hbar-template",
-  "description": "Scaffold-HBAR template skeleton: Next.js, Hardhat or Foundry, Hedera testnet.",
+  "name": "saucerswap-limit-orders",
+  "description": "Keeperless limit and stop-loss orders on SaucerSwap V2, guarded by Chainlink and executed by the Hedera Schedule Service.",
   "version": "0.0.1",
   "create-scaffold-hbar": {
     "capabilities": {

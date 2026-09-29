@@ -1,4 +1,4 @@
-# scaffold-hbar-template
+# saucerswap-limit-orders
 
 > Work in progress: this is the template skeleton. The use case, integration and full documentation land in the next iteration.
 
@@ -7,7 +7,7 @@ A [Scaffold-HBAR](https://docs.hedera.com/solutions/tools/scaffold-hbar) templat
 ## Create a project
 
 ```bash
-npm create scaffold-hbar@latest my-app -- --template Jagadeeshftw/scaffold-hbar-template
+npm create scaffold-hbar@latest my-app -- --template Jagadeeshftw/saucerswap-limit-orders
 ```
 
 The `--` matters. Without it, npm keeps `--template` for itself and the CLI never sees it.
