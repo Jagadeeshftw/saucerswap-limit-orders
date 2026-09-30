@@ -1,4 +1,5 @@
 {
+  "template": "Jagadeeshftw/saucerswap-limit-orders",
   "routes": [
     "/",
     "/?market=2",
@@ -88,6 +89,27 @@
       "event": "OrderChecked",
       "topic0": "0x1a7dbf431965c6067a9b8aea714120177a1e0d555a6dd0078b62e17d9ae1847b",
       "description": "Checks resume: the restarted sweep charges order #1 again"
+    },
+    {
+      "timestamp": "1790750098.393664008",
+      "scheduled": false,
+      "contract": "0x86867b8261f07b2be5427692417bb6b36e4e644a",
+      "event": "OrderPlaced",
+      "topic0": "0x94a9ab2daa7366c4b87412378f3606519f7ab5f3a446a76c08d7e4a58a48f4ce",
+      "description": "Order #6 placed through the frontend"
+    },
+    {
+      "timestamp": "1790748932.117943104",
+      "scheduled": true,
+      "contract": "0x86867b8261f07b2be5427692417bb6b36e4e644a",
+      "event": "FillHeld",
+      "topic0": "0x4da863769c919db72a1edd2c42732b7959df850e7fe9379da40679059d8f5ad9",
+      "description": "The guard holds order #3 again, after a doubled wait"
+    },
+    {
+      "timestamp": "1790748105.334112819",
+      "scheduled": false,
+      "description": "Order #4's NFT transferred to another account"
     }
   ]
 }

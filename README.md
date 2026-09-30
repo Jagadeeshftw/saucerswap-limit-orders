@@ -49,12 +49,20 @@ The frontend ships pointed at this vault, so `yarn next:dev` works without deplo
 ## Create a project
 
 ```bash
-npm create scaffold-hbar@latest my-app -- --template Jagadeeshftw/saucerswap-limit-orders
+npx create-scaffold-hbar@latest my-app --template Jagadeeshftw/saucerswap-limit-orders
 ```
 
-Keep the `--`: without it npm swallows `--template`. The CLI asks for a package manager; pass `--package-manager yarn` or `--package-manager npm` to skip the prompt. Every command below uses yarn; with npm, use `npm run <script>`.
+The CLI asks three questions: the package manager, the network (pick testnet), and whether to install the Hedera Skills for AI coding agents. To answer them up front, for a script, CI or an agent without a terminal, add `--network testnet --yes` and `--package-manager` with your choice. `--yes` alone takes the template's default package manager.
 
-Prerequisites: Node.js 20.18.3 or later, Git with `user.name` and `user.email` set (the CLI makes the first commit), Yarn (`corepack enable`) or npm, and Foundry 1.4 or later for contracts and tests.
+Prerequisites:
+
+- Node.js 20.18.3 or later.
+- Git with `user.name` and `user.email` set; the CLI makes the first commit.
+- For the Corepack-managed package manager, run `corepack enable` once (Node 25 and later no longer bundle Corepack: `npm install -g corepack`).
+- Foundry 1.4 or later and `make`, for the contracts, tests and deploy scripts.
+- Chromium for the browser tests, once: `npx playwright install chromium`.
+
+The commands below are written for the package manager you chose. Flags for a script go after `--` when you run it through `npm run`, for example `npm run foundry:deploy -- --keystore my-key`.
 
 ## Run it
 
@@ -64,23 +72,25 @@ yarn next:dev            # http://localhost:3000, against the live testnet vault
 
 Connect a wallet on Hedera testnet (chain 296) funded from the [portal faucet](https://portal.hedera.com/faucet). The Trade page walks you through associating the order NFT collection and the output token, approving the input token, and placing the order.
 
-### Deploy your own vault
+## Deploy your own vault
 
 ```bash
 yarn foundry:account:import      # or foundry:account:generate, then fund it from the faucet
 yarn foundry:deploy              # Hedera testnet; about 25 HBAR, mostly the HTS collection fee
 ```
 
-This deploys `OrderVault` and its two libraries, creates the NFT collection, lists both markets and rewrites `packages/nextjs/contracts/deployedContracts.ts`. There is no local chain: Anvil has none of Hedera's system contracts, so the vault only runs on Hedera. Tests use mocks of them instead.
+This deploys `OrderVault` and its two libraries, creates the NFT collection, lists both markets and rewrites `packages/nextjs/contracts/deployedContracts.ts`. There is no local chain: Anvil has none of Hedera's system contracts, so the vault only runs on Hedera, and the tests use mocks of them instead. The scaffold's `foundry:chain` and `--network localhost` still exist from the base template but don't apply here.
 
-### Configuration
+## Configuration
+
+The defaults work out of the box. To override the frontend's, copy `packages/nextjs/.env.example` to `packages/nextjs/.env.local`; `packages/foundry/.env` is created from its `.env.example` when you install.
 
 | Variable | File | Default | Used for |
 | --- | --- | --- | --- |
 | `NEXT_PUBLIC_HEDERA_TESTNET_RPC_URL` | `packages/nextjs/.env.local` | `https://testnet.hashio.io/api` | Wallet reads and transactions |
 | `NEXT_PUBLIC_MIRROR_NODE_URL` | `packages/nextjs/.env.local` | `https://testnet.mirrornode.hedera.com` | Order history, NFTs, associations, lag |
 | `NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID` | `packages/nextjs/.env.local` | scaffold's shared id | WalletConnect; get your own for production |
-| `HEDERA_RPC_URL` | `packages/foundry/.env` | `https://testnet.hashio.io/api` | Fork tests and `yarn foundry:pool-gap` |
+| `HEDERA_RPC_URL` | `packages/foundry/.env` | `https://testnet.hashio.io/api` | The `hedera_testnet` endpoint in `foundry.toml`: fork tests and `yarn foundry:pool-gap` |
 | `FORK_TESTS` | shell | unset | `true` runs the guard fork tests against live testnet |
 
 Deploys sign with a Foundry keystore, so no private key goes in any file.
@@ -118,7 +128,7 @@ yarn foundry:pool-gap             # HBAR/USDC
 MARKET=2 yarn foundry:pool-gap    # DAI/USDC
 ```
 
-It reads the pool's tick, liquidity and initialized ticks plus both feeds on a fork, and prints the token and amount to sell into the pool. Swapping that amount through the SaucerSwap router re-aligns it. It moves the price for everyone and anyone can push it back, which is why the guard exists.
+It reads the pool's tick, liquidity and initialized ticks plus both feeds on a fork (the first run takes a minute or two), and prints the token and amount to sell into the pool, or that the pool is already inside the guard's limit. Swapping that amount through the SaucerSwap router re-aligns it. It moves the price for everyone and anyone can push it back, which is why the guard exists.
 
 ## When checks stop
 
@@ -140,7 +150,7 @@ Topping up an order also restarts a stopped market.
 ## Tests
 
 ```bash
-yarn foundry:test          # unit, fuzz, edge and invariant suites (mocked Hedera system contracts)
+yarn foundry:test          # unit, fuzz, edge and invariant suites (mocked Hedera system contracts), 3-4 min
 yarn foundry:test:fork     # the guard against the real testnet pools and feeds
 yarn next:test             # frontend units: amounts, prices, budgets, order trail
 yarn next:test:e2e         # Playwright at 1440 and 390, every UI state
@@ -182,7 +192,8 @@ packages/foundry/
   script/Deploy.s.sol, script/PoolGap.s.sol
   test/                                   unit, fuzz, edge, invariant, fork
 packages/nextjs/
-  app/                                    Trade (/), My orders (/orders), order detail (/orders/[id])
+  app/                                    Trade (/), My orders (/orders), order detail (/orders/[id]),
+                                          Debug Contracts (/debug), and api/ from the scaffold
   components/orders/                      ticket, market panel, guard and checks-stopped banners
   hooks/orders/                           vault reads, mirror-node queries, wallet setup, tx state
   utils/orders/                           units, budgets, statuses, order trail, error messages
@@ -192,10 +203,10 @@ docs/ARCHITECTURE.md                      design, cost model, threat model, inva
 
 ## Template gate check
 
-`scripts/gate-check.mjs` reproduces the bounty's eligibility gate with the real `create-scaffold-hbar` CLI. It scaffolds with npm and with yarn, then runs install, lint, type-check, build, the contract tests, a production and a dev boot with route checks, gitleaks, licence and manifest checks, and verifies every testnet proof above on the mirror node.
+`scripts/gate-check.mjs` reproduces the bounty's eligibility gate with the real `create-scaffold-hbar` CLI. It scaffolds the template with both package managers the manifest allows, then runs install, lint, type-check, build, the contract tests, a production and a dev boot with route checks, gitleaks, licence and manifest checks, and verifies every testnet proof above on the mirror node.
 
 ```bash
-node scripts/gate-check.mjs                 # scaffold from GitHub, as a stranger would
+node scripts/gate-check.mjs                 # scaffold the template from GitHub, as a stranger would (about 35 min)
 node scripts/gate-check.mjs --local         # scaffold from the working tree
 node scripts/gate-check.mjs --proofs-only   # just the testnet proofs
 ```

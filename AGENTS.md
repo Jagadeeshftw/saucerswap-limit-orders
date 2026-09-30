@@ -4,7 +4,7 @@ Briefing for coding agents in this app (Cursor, Claude Code, Codex). Claude Code
 
 This is a Scaffold-HBAR template for keeperless limit and stop orders on SaucerSwap V2. `OrderVault` escrows orders, represents each one as an HTS NFT, and schedules its own market sweeps through the Hedera Schedule Service (HIP-1215). Before filling, it checks the pool TWAP against Chainlink.
 
-Use the package manager this project was created with (`packageManager` in the root `package.json`, or the lockfile). Examples use `yarn`; with npm, swap `yarn <script>` for `npm run <script>`.
+Use the package manager this project was created with (`packageManager` in the root `package.json`, or the lockfile). The examples below are written for it; with npm, flags for a script go after `--`.
 
 ## Packages
 

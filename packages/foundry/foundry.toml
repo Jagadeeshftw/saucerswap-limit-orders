@@ -22,7 +22,7 @@ ignore = ["test/**/*.sol"]
 
 [rpc_endpoints]
 localhost = "http://127.0.0.1:8545"
-hedera_testnet = "https://testnet.hashio.io/api"
+hedera_testnet = "${HEDERA_RPC_URL}"
 hedera_mainnet = "https://mainnet.hashio.io/api"
 
 # Hedera is now supported on the main Sourcify instance (sourcify.dev).

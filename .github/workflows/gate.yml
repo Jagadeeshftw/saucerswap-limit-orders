@@ -16,11 +16,21 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       is-template: ${{ steps.check.outputs.is-template }}
+      package-managers: ${{ steps.check.outputs.package-managers }}
     steps:
       - uses: actions/checkout@v4
       # Scaffolded apps have no template.json (the CLI consumes it), so this workflow stays inert there.
+      # The package managers come from the manifest, so this file never names them and survives the CLI's
+      # npm-mode rewrite of every YAML file.
       - id: check
-        run: echo "is-template=$([ -f template.json ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+        run: |
+          if [ -f template.json ]; then
+            echo "is-template=true" >> "$GITHUB_OUTPUT"
+            echo "package-managers=$(node -p 'JSON.stringify(require("./template.json")["create-scaffold-hbar"].capabilities.packageManager.filter(p => p !== "none"))')" >> "$GITHUB_OUTPUT"
+          else
+            echo "is-template=false" >> "$GITHUB_OUTPUT"
+            echo 'package-managers=[]' >> "$GITHUB_OUTPUT"
+          fi
 
   gate:
     needs: detect
@@ -31,12 +41,11 @@ jobs:
       fail-fast: false
       matrix:
         framework: [foundry]
-        pm: [npm, yarn]
+        pm: ${{ fromJSON(needs.detect.outputs.package-managers) }}
         node: [lts/*]
+        # The oldest Node the engines field allows (npm).
         include:
-          - framework: foundry
-            pm: npm
-            node: 20.18.3
+          - { framework: foundry, pm: "npm", node: "20.18.3" }
     name: gate (${{ matrix.framework }}, ${{ matrix.pm }}, node ${{ matrix.node }})
     steps:
       - uses: actions/checkout@v4

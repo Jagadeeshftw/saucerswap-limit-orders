@@ -26,19 +26,19 @@
           "title": "Next steps",
           "steps": [
             {
-              "label": "Start a local chain",
-              "command": "{run:framework:chain}"
-            },
-            {
-              "label": "Deploy contracts to that node",
-              "command": "{run:framework:deploy} --network localhost"
-            },
-            {
-              "label": "Start the frontend",
+              "label": "Start the frontend (it uses the live testnet vault)",
               "command": "{run:next:dev}"
             },
             {
-              "text": "README.md covers testnet setup, environment variables and architecture."
+              "label": "Run the contract tests",
+              "command": "{run:framework:test}"
+            },
+            {
+              "label": "Deploy your own vault to Hedera testnet (about 25 HBAR)",
+              "command": "{run:framework:deploy}"
+            },
+            {
+              "text": "There is no local chain: the vault needs Hedera's Schedule and Token Services. README.md has the proofs, costs and troubleshooting."
             }
           ]
         }

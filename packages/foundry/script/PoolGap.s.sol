@@ -16,6 +16,10 @@ interface IPoolState {
     function ticks(int24 tick) external view returns (uint128, int128, uint256, uint256, int56, uint160, uint32, bool);
 }
 
+interface ISymbol {
+    function symbol() external view returns (string memory);
+}
+
 interface IFeed {
     function latestRoundData() external view returns (uint80, int256, uint256, uint256, uint80);
 }
@@ -45,15 +49,22 @@ contract PoolGapScript is Script {
         console2.log("target tick", int256(target));
         console2.log("pool price (8 dp, quote per base)", poolPrice);
         console2.log("Chainlink price (8 dp)", oracle);
-        console2.log("deviation bps", PriceMath.deviationBps(poolPrice, oracle));
+        uint256 deviation = PriceMath.deviationBps(poolPrice, oracle);
+        console2.log("deviation bps", deviation);
+        console2.log("guard limit bps", uint256(m.guard.maxDeviationBps));
+        if (deviation <= m.guard.maxDeviationBps) {
+            console2.log("Within the guard's limit: orders in this market can fill. Nothing to do.");
+            return;
+        }
 
         bool up = target > tick; // the tick rises when token1 goes in
         uint256 amount = _amountIn(pool, tick, target, spacing, up);
         address tokenIn = up ? (m.baseIsToken0 ? m.quote : m.base) : (m.baseIsToken0 ? m.base : m.quote);
         uint8 decimals = tokenIn == m.base ? m.baseDecimals : m.quoteDecimals;
-        console2.log("token to sell into the pool", tokenIn);
-        console2.log("raw amount (before the pool fee)", amount);
-        console2.log("whole units", amount / 10 ** decimals);
+        string memory symbol = tokenIn == m.base && m.baseIsHbar ? "WHBAR" : ISymbol(tokenIn).symbol();
+        console2.log("To align it, sell this token into the pool:", symbol, tokenIn);
+        console2.log("amount, whole units (before the pool fee)", amount / 10 ** decimals);
+        console2.log("amount, raw", amount);
     }
 
     /// @dev Chainlink cross price, quote per base with 8 decimals, as the vault computes it.

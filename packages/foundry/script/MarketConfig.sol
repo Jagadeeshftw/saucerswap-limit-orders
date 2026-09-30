@@ -6,7 +6,7 @@ import { IAggregatorV3 } from "../contracts/interfaces/IAggregatorV3.sol";
 import { ISaucerSwapV2Pool } from "../contracts/interfaces/ISaucerSwapV2.sol";
 
 /// @title Hedera testnet addresses and measured costs for the shipped markets.
-/// @notice Every figure here was read or measured on Hedera testnet on 2026-09-29; see README "How costs are set".
+/// @notice Every figure here was read or measured on Hedera testnet on 2026-09-29; see "What an order costs" in the README.
 library MarketConfig {
     uint256 internal constant HEDERA_TESTNET = 296;
 

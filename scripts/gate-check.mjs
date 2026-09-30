@@ -7,6 +7,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import net from "node:net";
+
+// In an npm-mode project, create-scaffold-hbar replaces the other package manager's name with "npm" in every
+// text file, which would break this script there, so the name is assembled at runtime.
+const YARN = ["ya", "rn"].join("");
 import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -17,7 +21,7 @@ const SCHEMA_CLI_VERSION = "0.4.1";
 const MANIFEST_ENUMS = {
   frontend: ["nextjs-app", "none"],
   solidityFramework: ["hardhat", "foundry", "none"],
-  packageManager: ["yarn", "npm", "none"],
+  packageManager: [YARN, "npm", "none"],
 };
 const MIN_NODE = [20, 18, 3];
 const MINUTE = 60_000;
@@ -30,7 +34,7 @@ Options
   --template <owner/repo[#ref]>  Template to scaffold (default: this repo's origin remote)
   --local                        Scaffold from the working tree instead of GitHub
   --frameworks <list>            Comma list of foundry,hardhat (default: all the manifest allows)
-  --pms <list>                   Comma list of npm,yarn (default: all the manifest allows)
+  --pms <list>                   Comma list of package managers (default: all the manifest allows)
   --cli-version <v>              create-scaffold-hbar version (default: latest on npm)
   --skip-skills                  Do not install Hedera Skills during scaffold
   --allow-pending-proof          Do not fail when no testnet proof is configured yet
@@ -183,10 +187,10 @@ function baseEnv(workDir, binDir) {
 }
 
 function ensureYarn(binDir) {
-  if (which("yarn")) return true;
+  if (which(YARN)) return true;
   try {
-    execFileSync("corepack", ["enable", "--install-directory", binDir, "yarn"], { stdio: "ignore" });
-    return fs.existsSync(path.join(binDir, "yarn"));
+    execFileSync("corepack", ["enable", "--install-directory", binDir, YARN], { stdio: "ignore" });
+    return fs.existsSync(path.join(binDir, YARN));
   } catch {
     return false;
   }
@@ -194,8 +198,15 @@ function ensureYarn(binDir) {
 
 // ---------- template source ----------
 
+/** The template to check: this repo's GitHub origin, or the configured template in a clone without one. */
 function originTemplate() {
-  const url = execFileSync("git", ["remote", "get-url", "origin"], { cwd: REPO_ROOT, encoding: "utf8" }).trim();
+  let url;
+  try {
+    url = execFileSync("git", ["remote", "get-url", "origin"], { cwd: REPO_ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  } catch {
+    if (CONFIG.template) return CONFIG.template;
+    throw new Error("no origin remote and no template in scripts/gate.config.json; pass --template owner/repo");
+  }
   const match = url.match(/github\.com[:/]([\w.-]+)\/([\w.-]+?)(?:\.git)?$/);
   if (!match) throw new Error(`origin remote is not a GitHub repo: ${url}`);
   return `${match[1]}/${match[2]}`;
@@ -289,7 +300,7 @@ async function checkManifestReachable({ owner, repo, ref }) {
   record("remote", "template.json fetchable where the CLI looks", res.ok ? "pass" : "fail", `HTTP ${res.status}`);
 }
 
-// The CLI deletes yarn.lock in npm mode, so each package manager needs its own lockfile to stay reproducible.
+// The CLI deletes the Berry lockfile in npm mode, so each package manager needs its own lockfile to stay reproducible.
 async function checkLockfiles(src, pms, env, logFile) {
   const leaksLocalPath = text => /\/Users\/|\/home\/|file:\//.test(text);
   if (pms.includes("npm")) {
@@ -297,18 +308,18 @@ async function checkLockfiles(src, pms, env, logFile) {
     const text = fs.existsSync(lock) ? fs.readFileSync(lock, "utf8") : null;
     record("source", "package-lock.json for npm mode", text && !leaksLocalPath(text) ? "pass" : "fail", !text ? "missing" : leaksLocalPath(text) ? "contains local absolute paths" : "");
   }
-  if (!pms.includes("yarn")) return;
-  const lock = path.join(src, "yarn.lock");
+  if (!pms.includes(YARN)) return;
+  const lock = path.join(src, `${YARN}.lock`);
   const text = fs.existsSync(lock) ? fs.readFileSync(lock, "utf8") : "";
   const berry = text.includes("__metadata:");
-  record("source", "yarn.lock is Yarn Berry format", berry && !leaksLocalPath(text) ? "pass" : "fail", !text ? "missing" : !berry ? "v1 format (was it rewritten by npm?)" : leaksLocalPath(text) ? "contains local absolute paths" : "");
+  record("source", `${YARN}.lock is Berry format`, berry && !leaksLocalPath(text) ? "pass" : "fail", !text ? "missing" : !berry ? "v1 format (was it rewritten by npm?)" : leaksLocalPath(text) ? "contains local absolute paths" : "");
   if (!berry) return;
   // Install in a copy so the scaffold source stays free of node_modules and install state.
   const scratch = `${src}-lockcheck`;
   fs.cpSync(src, scratch, { recursive: true, verbatimSymlinks: true, filter: from => path.basename(from) !== ".git" });
-  const { code, output } = await run("yarn", ["install", "--immutable", "--mode=skip-build"], { cwd: scratch, env, logFile, timeoutMs: 15 * MINUTE });
+  const { code, output } = await run(YARN, ["install", "--immutable", "--mode=skip-build"], { cwd: scratch, env, logFile, timeoutMs: 15 * MINUTE });
   fs.rmSync(scratch, { recursive: true, force: true });
-  record("source", "yarn.lock in sync with package.json files", code === 0 ? "pass" : "fail", code === 0 ? "" : tail(output, 5));
+  record("source", `${YARN}.lock in sync with package.json files`, code === 0 ? "pass" : "fail", code === 0 ? "" : tail(output, 5));
 }
 
 function checkNoEnvFiles(src, trackedFiles) {
@@ -397,7 +408,7 @@ function scaffoldArgs(cliVersion, app, template, flags) {
 }
 
 function pmRun(pm, script) {
-  return pm === "npm" ? ["npm", ["run", script]] : ["yarn", [script]];
+  return pm === "npm" ? ["npm", ["run", script]] : [YARN, [script]];
 }
 
 async function freePort() {
@@ -548,12 +559,12 @@ async function main() {
     await checkTestnetProofs(false);
     process.exit(results.some(r => r.status === "fail") ? 1 : 0);
   }
+  const template = opts.template ?? originTemplate();
+  const ref = parseTemplateRef(template);
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "scaffold-hbar-gate-"));
   const binDir = path.join(workDir, "bin");
   fs.mkdirSync(binDir);
   const env = baseEnv(workDir, binDir);
-  const template = opts.template ?? originTemplate();
-  const ref = parseTemplateRef(template);
   console.log(`Gate check: ${template}${opts.local ? " (local working tree)" : ""}\nWorkspace: ${workDir}`);
 
   record("env", `node ${process.version} >= ${MIN_NODE.join(".")}`, versionAtLeast(process.version, MIN_NODE) ? "pass" : "fail");
@@ -586,11 +597,11 @@ async function main() {
 
   const caps = manifest?.["create-scaffold-hbar"]?.capabilities ?? {};
   const frameworks = opts.frameworks ?? (caps.solidityFramework ?? ["foundry", "hardhat"]).filter(fw => fw !== "none");
-  const pms = opts.pms ?? (caps.packageManager ?? ["yarn", "npm"]).filter(pm => pm !== "none");
+  const pms = opts.pms ?? (caps.packageManager ?? [YARN, "npm"]).filter(pm => pm !== "none");
 
   if (!opts.local) await checkCapabilitiesHonoured({ manifest, template, cliVersion, workDir, env });
 
-  if (pms.includes("yarn")) record("env", "yarn available (corepack shim if needed)", ensureYarn(binDir) ? "pass" : "fail");
+  if (pms.includes(YARN)) record("env", `${YARN} available (corepack shim if needed)`, ensureYarn(binDir) ? "pass" : "fail");
   if (frameworks.includes("foundry")) record("env", "forge on PATH", which("forge") ? "pass" : "fail");
   await checkLockfiles(srcDir, pms, env, logFile);
 
