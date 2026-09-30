@@ -507,14 +507,14 @@ contract OrderVaultTest is OrderVaultBase {
         }
         assertTrue(vault.getOrder(orderId).funded, "six checks are prepaid");
         uint256 before = vault.getOrder(orderId).budget;
-        uint256 surplusBefore = vault.surplus();
+        uint256 surplusBefore = _spare();
         _runScheduledSweep(HBAR_MARKET);
         Order memory o = vault.getOrder(orderId);
         assertFalse(o.funded);
         Costs memory c = MarketConfig.costs();
         // The chain's last sweep is paid from the order's reserve, not the vault's spare HBAR.
         assertEq(before - o.budget, _tinybar(uint256(c.sweepBaseGas) + c.checkGas), "pays for its final sweep");
-        assertEq(vault.surplus() - surplusBefore, before - o.budget);
+        assertEq(_spare() - surplusBefore, before - o.budget);
         assertGe(o.budget, _tinybar(uint256(c.fillGasHbarIn) + c.settleGas), "the fill is still covered");
         assertEq(hss.count(), 7, "the chain stops once no order is funded");
     }
@@ -685,14 +685,57 @@ contract OrderVaultTest is OrderVaultBase {
 
     function test_withdrawSurplus_neverTouchesOwedFunds() public {
         _sellHbar(alice, ABOVE_MARKET, Trigger.AtOrAbove);
-        uint256 owed = vault.escrowed(address(0)) + vault.totalBudgets();
-        vm.deal(address(vault), address(vault).balance + 3e8); // e.g. HTS creation fee change
+        uint256 float = vault.payerFloat();
+        assertGt(float, 0, "a funded market reserves a float");
+        uint256 owed = vault.escrowed(address(0)) + vault.totalBudgets() + vault.totalCredits(address(0)) + float;
+        vm.deal(address(vault), owed + 3e8); // e.g. HTS creation fee change on top of everything owed
         assertEq(vault.surplus(), 3e8);
         uint256 before = owner.balance;
         vm.prank(owner);
         vault.withdrawSurplus(payable(owner));
         assertEq(owner.balance, before + 3e8);
+        // The vault keeps the float liquid, so it can still pay its own keeper after the owner withdraws.
         assertEq(address(vault).balance, owed);
+    }
+
+    function test_fund_backsTheFloatAndIsWithdrawableAboveIt() public {
+        _sellHbar(alice, ABOVE_MARKET, Trigger.AtOrAbove);
+        uint256 float = vault.payerFloat();
+        assertGt(float, 0);
+        uint256 spareBefore = _spare();
+        vm.deal(alice, 10e8);
+        vm.prank(alice);
+        vault.fund{ value: 10e8 }(); // anyone may keep the vault's keeper alive
+        assertEq(_spare(), spareBefore + 10e8, "the endowment is spare HBAR");
+        // The float stays put; only the endowment above it is withdrawable surplus.
+        assertEq(vault.surplus(), spareBefore + 10e8 - float);
+    }
+
+    function test_fund_emitsFunded() public {
+        vm.deal(alice, 5e8);
+        vm.expectEmit(true, false, false, true, address(vault));
+        emit OrderVault.Funded(alice, 5e8);
+        vm.prank(alice);
+        vault.fund{ value: 5e8 }();
+    }
+
+    function test_payerFloat_zeroWithoutFundedOrders() public view {
+        assertEq(vault.payerFloat(), 0, "no funded market, nothing to reserve");
+        assertEq(vault.surplus(), 0);
+    }
+
+    function test_surplus_withholdsPayerFloat() public {
+        _sellHbar(alice, ABOVE_MARKET, Trigger.AtOrAbove);
+        // The float covers one full scheduled sweep of the funded market at the configured price.
+        uint256 float = vault.payerFloat();
+        assertEq(float, _tinybar(vault.sweepGasLimit(HBAR_MARKET)), "float is one sweep at the configured price");
+        // Give the vault exactly the float above what it owes: nothing is withdrawable.
+        uint256 owed = vault.escrowed(address(0)) + vault.totalBudgets() + vault.totalCredits(address(0));
+        vm.deal(address(vault), owed + float);
+        assertEq(vault.surplus(), 0, "the float is not surplus");
+        vm.prank(owner);
+        vm.expectRevert(OrderVault.InvalidAmount.selector);
+        vault.withdrawSurplus(payable(owner));
     }
 
     function test_withdrawSurplus_revertsWhenNone() public {

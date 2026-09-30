@@ -405,6 +405,7 @@ contract OrderVaultEdgeTest is OrderVaultBase {
     function test_withdrawSurplus_revertsWhenRecipientRejects() public {
         _sellHbar(alice, FAR, Trigger.AtOrAbove);
         _runScheduledSweep(HBAR_MARKET); // the check fee becomes surplus once the vault has paid it
+        vm.deal(address(vault), address(vault).balance + vault.payerFloat()); // cover the float so the fee is withdrawable
         assertGt(vault.surplus(), 0);
         HbarRejecter rejecter = new HbarRejecter();
         vm.prank(owner);

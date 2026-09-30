@@ -173,6 +173,14 @@ abstract contract OrderVaultBase is Test {
     }
 
     /// @dev Tinybar the vault charges for `gas`: the configured USD gas price plus margin, at the mock's testnet rate.
+    /// @dev What the vault holds above escrow, budgets and credits, ignoring the payer float it earmarks.
+    ///      Charges land here first; the float only decides how much of it `surplus()` will release.
+    function _spare() internal view returns (uint256) {
+        address hbar = address(0);
+        uint256 owed = vault.escrowed(hbar) + vault.totalBudgets() + vault.totalCredits(hbar);
+        return address(vault).balance > owed ? address(vault).balance - owed : 0;
+    }
+
     function _tinybar(uint256 gas) internal pure returns (uint256) {
         Costs memory c = MarketConfig.costs();
         uint256 tinycents = gas * c.gasPriceTinycents;

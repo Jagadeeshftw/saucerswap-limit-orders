@@ -161,6 +161,7 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
     event Claimed(address indexed account, address indexed token, uint256 amount);
     event NftSettlementFailed(uint256 indexed orderId, int64 responseCode);
     event SurplusWithdrawn(address indexed to, uint256 amount);
+    event Funded(address indexed from, uint256 amount);
 
     // ---------------------------------------------------------------------------------------
     // Errors
@@ -256,7 +257,14 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
         _setCosts(costs_);
     }
 
-    /// @notice Withdraw HBAR the vault holds beyond escrow, budgets and credits (e.g. leftover creation fee).
+    /// @notice Endow the vault with liquid HBAR to back the payer float, so its scheduled sweeps can always
+    ///         pay their gas at execution. Anyone may fund it; only the owner may withdraw the surplus above
+    ///         the float. Kept separate from `receive`, which only accepts swap proceeds from the router.
+    function fund() external payable {
+        emit Funded(msg.sender, msg.value);
+    }
+
+    /// @notice Withdraw HBAR the vault holds beyond escrow, budgets, credits and the payer float.
     function withdrawSurplus(address payable to) external onlyOwner nonReentrant {
         uint256 amount = surplus();
         if (amount == 0) revert InvalidAmount();
@@ -590,9 +598,23 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
             * (uint256(costs.fillGasTokenIn) + costs.settleGas);
     }
 
-    /// @notice HBAR the vault holds beyond what it owes: escrow, budgets and credits.
+    /// @notice HBAR the vault keeps liquid to pay one scheduled sweep at execution, so a surplus withdrawal
+    ///         can never leave a funded market unable to pay its own keeper. Sized to the costliest funded
+    ///         market's sweep at the configured price. A residual stall (a gas-price spike past this reserve,
+    ///         or HSS capacity saturation) is still possible and is what `restartSweep` recovers.
+    function payerFloat() public view returns (uint256 float) {
+        uint256 rate = _rate();
+        uint256 n = marketCount;
+        for (uint256 id = 1; id <= n; ++id) {
+            if (sweeps[id].fundedOrders == 0) continue;
+            uint256 need = _gasToTinybar(sweepGasLimit(id), rate);
+            if (need > float) float = need;
+        }
+    }
+
+    /// @notice HBAR the vault holds beyond what it owes: escrow, budgets, credits and the payer float.
     function surplus() public view returns (uint256) {
-        uint256 owed = escrowed[HBAR] + totalBudgets + totalCredits[HBAR];
+        uint256 owed = escrowed[HBAR] + totalBudgets + totalCredits[HBAR] + payerFloat();
         return address(this).balance > owed ? address(this).balance - owed : 0;
     }
 

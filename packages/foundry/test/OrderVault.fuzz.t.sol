@@ -142,7 +142,7 @@ contract OrderVaultFuzzTest is OrderVaultBase {
             ids[i] = _place(i % 2 == 0 ? alice : bob, c);
             before[i] = vault.getOrder(ids[i]).budget;
         }
-        uint256 surplusBefore = vault.surplus();
+        uint256 surplusBefore = _spare();
         _runScheduledSweep(HBAR_MARKET);
 
         uint256 share = vault.checkCostShared(n);
@@ -151,7 +151,7 @@ contract OrderVaultFuzzTest is OrderVaultBase {
             assertEq(before[i] - o.budget, share, "every order pays the same share");
             assertGe(o.budget, vault.fillCost(HBAR_MARKET, Side.SellBase), "the reserve is untouched");
         }
-        assertEq(vault.surplus() - surplusBefore, n * share, "the vault keeps exactly what it charged");
+        assertEq(_spare() - surplusBefore, n * share, "the vault keeps exactly what it charged");
         // Each share rounds its slice of the fixed gas up by at most one gas.
         assertLe(
             share * n,
