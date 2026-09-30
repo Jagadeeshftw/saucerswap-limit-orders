@@ -17,6 +17,7 @@
     "lint": "make lint",
     "lint-staged": "yarn lint",
     "postinstall": "shx cp -n .env.example .env",
+    "pool-gap": "forge script script/PoolGap.s.sol --fork-url ${HEDERA_RPC_URL:-https://testnet.hashio.io/api}",
     "test": "forge test",
     "test:fork": "FORK_TESTS=true forge test --match-contract Fork -vv",
     "test:local": "forge test --fork-url http://127.0.0.1:8545 --chain-id 296 --ffi",

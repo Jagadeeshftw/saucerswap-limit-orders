@@ -172,6 +172,19 @@ test.describe("Trade", () => {
     await capture(page, info, "27-trade-budget-covers-expiry");
   });
 
+  test("sizes a triggered order's budget by what the vault will do", async ({ page }) => {
+    await open(page, baseScenario(), "/?market=2");
+    await page.getByTestId("kind-stop").click();
+    await fillTicket(page, "100", "1.0100"); // DAI at 0.9998 is already at or below 1.0100
+    await expect(page.getByTestId("budget-line")).toContainText("should fill on the next scheduled check");
+    await expect(page.getByTestId("budget-line")).toContainText("Check budget 12.6236 HBAR");
+
+    await page.goto("/?market=1");
+    await fillTicket(page, "100", "0.1000"); // HBAR at 0.1034 meets it, but the guard is closed
+    await expect(page.getByTestId("budget-line")).toContainText("the guard is holding this market");
+    await expect(page.getByTestId("budget-line")).toContainText("9 checks");
+  });
+
   test("shows when a market's checks have stopped and lets anyone restart them", async ({ page }, info) => {
     const s = baseScenario();
     s.stalled = [1];
@@ -194,6 +207,8 @@ test.describe("Trade", () => {
     await expect(page.getByTestId("placed")).toContainText("Order #21 placed.");
     await capture(page, info, "13-order-placed");
     expect(s.sent.at(-1)?.value).toBeDefined();
+    // The relay's estimate undercounts HTS and HSS work, so the placement carries the measured limit.
+    expect(BigInt(s.sent.at(-1)!.gas!)).toBe(3_200_000n);
     await page.getByRole("link", { name: "Follow it" }).click();
     await expect(page.getByRole("heading", { name: "Order #21" })).toBeVisible();
   });
@@ -210,7 +225,8 @@ test.describe("My orders", () => {
     await expect(rows.nth(1)).toContainText("#13");
     await expect(rows.nth(1)).toContainText("Held by guard");
     await expect(rows.nth(3)).toContainText("Budget empty");
-    await expect(rows.last()).toContainText("#1");
+    await expect(rows.nth(5)).toContainText("#5");
+    await expect(rows.last()).toContainText("#3");
     await capture(page, info, "14-my-orders");
     await page.getByTestId("filter-open").click();
     await expect(rows).toHaveCount(5);
@@ -239,11 +255,11 @@ test.describe("My orders", () => {
 
 test.describe("Order detail", () => {
   test("shows the Schedule Service checks of an order held by the guard", async ({ page }, info) => {
-    await open(page, withOrderBook(baseScenario()), "/orders/2");
-    await expect(page.getByRole("heading", { name: "Order #2" })).toBeVisible();
+    await open(page, withOrderBook(baseScenario()), "/orders/3");
+    await expect(page.getByRole("heading", { name: "Order #3" })).toBeVisible();
     const trail = page.getByTestId("trail");
     await expect(trail).toContainText("held by guard");
-    await expect(trail).toContainText("Placed: 20 HBAR escrowed");
+    await expect(trail).toContainText("Placed: 1 HBAR escrowed");
     await expect(trail.getByRole("link", { name: "HashScan" }).first()).toHaveAttribute(
       "href",
       /hashscan\.io\/testnet\/transaction\/\d+\.\d+/,
@@ -266,8 +282,8 @@ test.describe("Order detail", () => {
   });
 
   test("shows a filled order", async ({ page }, info) => {
-    await open(page, withOrderBook(baseScenario()), "/orders/1");
-    await expect(page.getByTestId("trail")).toContainText("Filled: 3 DAI for 3.0052 USDC");
+    await open(page, withOrderBook(baseScenario()), "/orders/5");
+    await expect(page.getByTestId("trail")).toContainText("Filled: 0.5 DAI for 0.5008 USDC");
     await expect(page.getByTestId("order-actions")).toHaveCount(0);
     await capture(page, info, "18-order-filled");
   });

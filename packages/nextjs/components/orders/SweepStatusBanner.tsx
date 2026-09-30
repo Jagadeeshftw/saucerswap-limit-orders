@@ -8,6 +8,7 @@ import { SweepStatus, useSweepStatus } from "~~/hooks/orders/useMarkets";
 import { vault } from "~~/hooks/orders/useVault";
 import { useVaultTx } from "~~/hooks/orders/useVaultTx";
 import { useWallet } from "~~/hooks/orders/useWallet";
+import { GAS_LIMIT, maxFee } from "~~/utils/orders/gas";
 import { formatAmount } from "~~/utils/orders/units";
 
 const NO_TOKENS: { address: string; entityId: string }[] = [];
@@ -23,24 +24,12 @@ export const SweepStatusBanner = ({ marketId }: { marketId: number }) => {
   const publicClient = usePublicClient({ chainId: vault.chainId });
   const stalled = status === SweepStatus.Stalled;
 
-  const fee = useQuery({
-    queryKey: ["restart-fee", marketId, wallet.address],
-    enabled: stalled && Boolean(publicClient && wallet.address),
-    retry: false,
-    queryFn: async () => {
-      const [gas, gasPrice] = await Promise.all([
-        publicClient!.estimateContractGas({
-          address: vault.address as `0x${string}`,
-          abi: vault.abi,
-          functionName: "restartSweep",
-          args: [BigInt(marketId)],
-          account: wallet.address,
-        }),
-        publicClient!.getGasPrice(),
-      ]);
-      return gas * gasPrice;
-    },
+  const { data: gasPrice } = useQuery({
+    queryKey: ["gas-price"],
+    queryFn: () => publicClient!.getGasPrice(),
+    enabled: stalled && Boolean(publicClient),
   });
+  const fee = gasPrice !== undefined ? maxFee(GAS_LIMIT.restartSweep, gasPrice) : undefined;
 
   if (!stalled) return null;
   const restart = async () => {
@@ -50,6 +39,7 @@ export const SweepStatusBanner = ({ marketId }: { marketId: number }) => {
       functionName: "restartSweep",
       args: [BigInt(marketId)],
       chainId: vault.chainId,
+      gas: GAS_LIMIT.restartSweep,
     });
     await refetch();
   };
@@ -68,10 +58,10 @@ export const SweepStatusBanner = ({ marketId }: { marketId: number }) => {
           Orders in this market are funded, but no check is scheduled: the one due{" "}
           {nextSweepAt ? ago(nextSweepAt) : "earlier"} never ran. That happens when the vault cannot pay for a scheduled
           call, or the network drops it. Anyone can restart checks and pays only the scheduling fee
-          {fee.data !== undefined ? (
+          {fee !== undefined ? (
             <>
               {" "}
-              (about <b className="font-mono">{formatAmount(fee.data, 18, 3)} HBAR</b>)
+              (at most <b className="font-mono">{formatAmount(fee, 18, 3)} HBAR</b>)
             </>
           ) : null}
           .

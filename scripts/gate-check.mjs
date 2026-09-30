@@ -34,6 +34,7 @@ Options
   --cli-version <v>              create-scaffold-hbar version (default: latest on npm)
   --skip-skills                  Do not install Hedera Skills during scaffold
   --allow-pending-proof          Do not fail when no testnet proof is configured yet
+  --proofs-only                  Only verify the testnet proofs in scripts/gate.config.json on the mirror node
   --strict                       Treat warnings as failures
   --keep                         Keep the temp workspace for inspection
 `;
@@ -57,6 +58,7 @@ function parseArgs(argv) {
       case "--local": opts.local = true; break;
       case "--skip-skills": opts.skipSkills = true; break;
       case "--allow-pending-proof": opts.allowPendingProof = true; break;
+      case "--proofs-only": opts.proofsOnly = true; break;
       case "--strict": opts.strict = true; break;
       case "--keep": opts.keep = true; break;
       case "-h": case "--help": console.log(HELP); process.exit(0);
@@ -336,16 +338,44 @@ function mirrorTxPath(id, scheduled) {
   return `transactions/${match[1]}-${match[2]}-${match[3]}${scheduled ? "?scheduled=true" : ""}`;
 }
 
+const MIRROR = "https://testnet.mirrornode.hedera.com/api/v1";
+const mirrorJson = url => fetch(url).then(r => (r.ok ? r.json() : null));
+
+/**
+ * A proof is a transaction id or hash, or a consensus timestamp. A timestamp proof can also require that the
+ * transaction was run by the Schedule Service (`scheduled`) and that `contract` emitted at least `minLogs`
+ * logs with `topic0` in it, so a proof shows what happened, not just that something succeeded.
+ */
+async function verifyProof(proof) {
+  if (!proof.timestamp) {
+    const body = await mirrorJson(`${MIRROR}/${mirrorTxPath(proof.id, proof.scheduled)}`);
+    const result = body?.transactions?.[0]?.result ?? body?.result;
+    return result === "SUCCESS" ? { ok: true, detail: "mirror node result: SUCCESS" } : { ok: false, detail: `mirror node result: ${result ?? "not found"}` };
+  }
+  const txs = (await mirrorJson(`${MIRROR}/transactions?timestamp=${proof.timestamp}`))?.transactions ?? [];
+  const tx = txs[0];
+  if (!tx) return { ok: false, detail: "no transaction at that consensus timestamp" };
+  if (tx.result !== "SUCCESS") return { ok: false, detail: `result ${tx.result}` };
+  if (proof.scheduled !== undefined && tx.scheduled !== proof.scheduled) {
+    return { ok: false, detail: `scheduled is ${tx.scheduled}, expected ${proof.scheduled}` };
+  }
+  if (proof.topic0) {
+    const logs = (await mirrorJson(`${MIRROR}/contracts/${proof.contract}/results/logs?timestamp=${proof.timestamp}&topic0=${proof.topic0}`))?.logs ?? [];
+    const need = proof.minLogs ?? 1;
+    if (logs.length < need) return { ok: false, detail: `${logs.length} ${proof.event ?? "matching"} log(s), expected ${need}` };
+  }
+  const what = [tx.scheduled ? "scheduled" : tx.name, proof.event ? `${proof.event} emitted` : null].filter(Boolean).join(", ");
+  return { ok: true, detail: `SUCCESS, ${what}` };
+}
+
 async function checkTestnetProofs(allowPending) {
   if (!CONFIG.testnetProofs.length) {
     record("proof", "testnet transaction on mirror node", allowPending ? "pending" : "fail", "no testnetProofs in scripts/gate.config.json");
     return;
   }
   for (const proof of CONFIG.testnetProofs) {
-    const url = `https://testnet.mirrornode.hedera.com/api/v1/${mirrorTxPath(proof.id, proof.scheduled)}`;
-    const body = await fetch(url).then(r => (r.ok ? r.json() : null));
-    const result = body?.transactions?.[0]?.result ?? body?.result;
-    record("proof", `${proof.description} (${proof.id})`, result === "SUCCESS" ? "pass" : "fail", `mirror node result: ${result ?? "not found"}`);
+    const { ok, detail } = await verifyProof(proof);
+    record("proof", `${proof.description} (${proof.timestamp ?? proof.id})`, ok ? "pass" : "fail", detail);
   }
 }
 
@@ -514,6 +544,10 @@ async function checkCapabilitiesHonoured({ manifest, template, cliVersion, workD
 
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
+  if (opts.proofsOnly) {
+    await checkTestnetProofs(false);
+    process.exit(results.some(r => r.status === "fail") ? 1 : 0);
+  }
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "scaffold-hbar-gate-"));
   const binDir = path.join(workDir, "bin");
   fs.mkdirSync(binDir);

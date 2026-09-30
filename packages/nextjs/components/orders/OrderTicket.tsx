@@ -12,8 +12,9 @@ import { useCollectionId } from "~~/hooks/orders/useOrders";
 import { vault } from "~~/hooks/orders/useVault";
 import { useVaultTx } from "~~/hooks/orders/useVaultTx";
 import { useWallet } from "~~/hooks/orders/useWallet";
-import { budgetFor, checksFor, coverageSeconds, durationText } from "~~/utils/orders/budget";
-import { type OrderKind, Side, Trigger, comparatorText, triggerFor } from "~~/utils/orders/orders";
+import { budgetFor, checksFor, checksWhileHeld, coverageSeconds, durationText } from "~~/utils/orders/budget";
+import { GAS_LIMIT, maxFee } from "~~/utils/orders/gas";
+import { GuardState, type OrderKind, Side, Trigger, comparatorText, triggerFor } from "~~/utils/orders/orders";
 import {
   addressFromEntityId,
   formatAmount,
@@ -125,14 +126,30 @@ export const OrderTicket = ({ market, guard }: { market: MarketInfo; guard: Guar
 
   // The budget pays for every check the order needs until it expires, at the vault's own pace for this trigger.
   const waits = useCheckDelays(market.id, trigger, triggerPrice, LIFETIMES);
-  const budgetForLifetime = (index: number) => {
+  // An order whose trigger is already met fills on its first check if the guard is open; if the guard holds it,
+  // the vault backs off instead of checking every few minutes. Otherwise it is checked at the vault's pace.
+  const triggeredNow =
+    triggerPrice !== null && triggerPrice > 0n && oracle > 0n
+      ? trigger === Trigger.AtOrAbove
+        ? oracle >= triggerPrice
+        : oracle <= triggerPrice
+      : false;
+  const checksOver = (index: number) => {
     const wait = waits[index];
-    if (!costs || wait === undefined) return undefined;
-    return budgetFor(checksFor(LIFETIMES[index], wait), costs.soloCheck, costs.fill, costs.minBudget);
+    if (wait === undefined) return undefined;
+    if (!triggeredNow) return checksFor(LIFETIMES[index], wait);
+    return guard?.state === GuardState.Open
+      ? 1
+      : checksWhileHeld(LIFETIMES[index], market.minInterval, market.maxInterval);
+  };
+  const budgetForLifetime = (index: number) => {
+    const checks = checksOver(index);
+    if (!costs || checks === undefined) return undefined;
+    return budgetFor(checks, costs.soloCheck, costs.fill, costs.minBudget);
   };
   const expiryIndex = LIFETIMES.indexOf(expiry);
   const wait = waits[expiryIndex];
-  const checks = wait !== undefined ? checksFor(expiry, wait) : undefined;
+  const checks = checksOver(expiryIndex);
   const budget = budgetForLifetime(expiryIndex);
   const sharedLasts =
     costs?.sharedCheck && budget !== undefined && wait !== undefined
@@ -141,7 +158,16 @@ export const OrderTicket = ({ market, guard }: { market: MarketInfo; guard: Guar
 
   const inputBalance = input.isHbar ? wallet.hbarTinybar : wallet.token(input.address).balance;
   const allowance = input.isHbar ? undefined : wallet.token(input.address).allowance;
-  const hbarNeeded = budget !== undefined ? budget + (input.isHbar ? (amount ?? 0n) : 0n) : undefined;
+  // The relay's gas estimates undercount HTS and HSS work, so the fee is bounded by the measured limit instead.
+  const { data: gasPrice } = useQuery({
+    queryKey: ["gas-price"],
+    queryFn: () => publicClient!.getGasPrice(),
+    enabled: Boolean(publicClient),
+    refetchInterval: 60_000,
+  });
+  const placeFee = gasPrice !== undefined ? maxFee(GAS_LIMIT.placeOrder, gasPrice) : undefined;
+  const placeFeeTinybar = placeFee !== undefined ? placeFee / 10n ** 10n : 0n;
+  const hbarNeeded = budget !== undefined ? budget + (input.isHbar ? (amount ?? 0n) : 0n) + placeFeeTinybar : undefined;
   const expectedOut =
     amount && triggerPrice
       ? side === Side.SellBase
@@ -164,7 +190,7 @@ export const OrderTicket = ({ market, guard }: { market: MarketInfo; guard: Guar
   }
   if (hbarNeeded !== undefined && wallet.hbarTinybar !== undefined && hbarNeeded > wallet.hbarTinybar) {
     problems.push(
-      `Insufficient HBAR: this order needs ${formatHbar(hbarNeeded)} and you have ${formatHbar(wallet.hbarTinybar)}.`,
+      `Insufficient HBAR: this order needs ${formatHbar(hbarNeeded)} including network fees, and you have ${formatHbar(wallet.hbarTinybar)}.`,
     );
   }
 
@@ -199,32 +225,13 @@ export const OrderTicket = ({ market, guard }: { market: MarketInfo; guard: Guar
   const value =
     params && budget !== undefined ? tinybarToWeibar(budget + (input.isHbar ? params.amountIn : 0n)) : undefined;
 
-  const fee = useQuery({
-    queryKey: ["place-fee", market.id, side, trigger, String(params?.amountIn), String(value), wallet.address],
-    enabled: Boolean(ready && params && publicClient && wallet.address),
-    retry: false,
-    queryFn: async () => {
-      const [gas, gasPrice] = await Promise.all([
-        publicClient!.estimateContractGas({
-          address: vault.address as `0x${string}`,
-          abi: vault.abi,
-          functionName: "placeOrder",
-          args: [params!],
-          value,
-          account: wallet.address,
-        }),
-        publicClient!.getGasPrice(),
-      ]);
-      return gas * gasPrice;
-    },
-  });
-
   const associate = (entityId: string) =>
     tx.send({
       address: addressFromEntityId(entityId),
       abi: hip719Abi,
       functionName: "associate",
       chainId: vault.chainId,
+      gas: GAS_LIMIT.associate,
     });
   const approve = () =>
     tx.send({
@@ -233,6 +240,7 @@ export const OrderTicket = ({ market, guard }: { market: MarketInfo; guard: Guar
       functionName: "approve",
       args: [vault.address as `0x${string}`, amount!],
       chainId: vault.chainId,
+      gas: GAS_LIMIT.approve,
     });
   const place = async () => {
     const receipt = await tx.send({
@@ -242,6 +250,7 @@ export const OrderTicket = ({ market, guard }: { market: MarketInfo; guard: Guar
       args: [params!],
       value,
       chainId: vault.chainId,
+      gas: GAS_LIMIT.placeOrder,
     });
     const placed = receipt && parseEventLogs({ abi: vault.abi, logs: receipt.logs, eventName: "OrderPlaced" })[0];
     if (placed) setPlacedId(placed.args.orderId);
@@ -318,38 +327,35 @@ export const OrderTicket = ({ market, guard }: { market: MarketInfo; guard: Guar
         </div>
       </Field>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Max slippage" htmlFor="slippage">
-          <div className="input input-bordered flex w-full items-center gap-2 rounded-full">
-            <input
-              id="slippage"
-              inputMode="decimal"
-              className="grow font-mono tabular-nums"
-              value={slippageText}
-              onChange={e => setSlippageText(e.target.value)}
-            />
-            <span className="text-sm font-semibold text-base-content/70">%</span>
-          </div>
-        </Field>
-        <Field label="Expires in" htmlFor="expiry">
-          <select
-            id="expiry"
-            className="select select-bordered w-full rounded-full"
-            value={expiry}
-            onChange={e => setExpiry(Number(e.target.value))}
-          >
-            {EXPIRIES.map((e, i) => {
-              const cost = budgetForLifetime(i);
-              return (
-                <option key={e.seconds} value={e.seconds}>
-                  {cost !== undefined ? `${e.label} · ${formatHbar(cost, 2)} budget` : e.label}
-                </option>
-              );
-            })}
-          </select>
-        </Field>
-      </div>
-
+      <Field label="Max slippage" htmlFor="slippage">
+        <div className="input input-bordered flex w-full items-center gap-2 rounded-full">
+          <input
+            id="slippage"
+            inputMode="decimal"
+            className="grow font-mono tabular-nums"
+            value={slippageText}
+            onChange={e => setSlippageText(e.target.value)}
+          />
+          <span className="text-sm font-semibold text-base-content/70">%</span>
+        </div>
+      </Field>
+      <Field label="Expires in" hint="budget covers the whole time" htmlFor="expiry">
+        <select
+          id="expiry"
+          className="select select-bordered w-full rounded-full"
+          value={expiry}
+          onChange={e => setExpiry(Number(e.target.value))}
+        >
+          {EXPIRIES.map((e, i) => {
+            const cost = budgetForLifetime(i);
+            return (
+              <option key={e.seconds} value={e.seconds}>
+                {cost !== undefined ? `${e.label} · ${formatHbar(cost, 2)} budget` : e.label}
+              </option>
+            );
+          })}
+        </select>
+      </Field>
       <div
         className="grid gap-2 rounded-xl border border-dashed border-base-300 bg-base-200 p-4 text-sm leading-relaxed"
         data-testid="ticket-summary"
@@ -390,11 +396,23 @@ export const OrderTicket = ({ market, guard }: { market: MarketInfo; guard: Guar
         {costs && budget !== undefined && wait !== undefined && checks !== undefined && (
           <span className="text-base-content/80" data-testid="budget-line">
             Check budget <b className="font-mono">{formatHbar(budget)}</b> covers the whole{" "}
-            {EXPIRIES[expiryIndex].label}: at today&apos;s price the market checks this order about every{" "}
-            {durationText(wait)}, so {checks} {checks === 1 ? "check" : "checks"} at {formatHbar(costs.soloCheck)} each
-            while it is the only open order, plus {formatHbar(costs.fill)} held back for the fill and the last check.
-            Checks come faster as the price nears your trigger; if the budget runs out the order shows{" "}
-            <i>Budget empty</i> and you can top it up.
+            {EXPIRIES[expiryIndex].label}:{" "}
+            {!triggeredNow ? (
+              <>
+                at today&apos;s price the market checks this order about every {durationText(wait)}, so {checks}{" "}
+                {checks === 1 ? "check" : "checks"}
+              </>
+            ) : guard?.state === GuardState.Open ? (
+              <>the trigger is already met, so it should fill on the next scheduled check, about 1 check</>
+            ) : (
+              <>
+                the trigger is already met but the guard is holding this market, so checks back off from{" "}
+                {durationText(market.minInterval * 2)} to every {durationText(market.maxInterval)}: {checks} checks
+              </>
+            )}{" "}
+            at {formatHbar(costs.soloCheck)} each while it is the only open order, plus {formatHbar(costs.fill)} held
+            back for the fill and the last check. Checks come faster as the price nears your trigger; if the budget runs
+            out the order shows <i>Budget empty</i> and you can top it up.
             {costs.sharedCheck !== undefined && costs.fundedOrders > 0 && sharedLasts !== undefined && (
               <>
                 {" "}
@@ -405,10 +423,10 @@ export const OrderTicket = ({ market, guard }: { market: MarketInfo; guard: Guar
             Unused budget is refunded.
           </span>
         )}
-        {fee.data !== undefined && (
+        {placeFee !== undefined && (
           <span className="text-base-content/80">
-            Placing it costs about <b className="font-mono">{formatAmount(fee.data, 18, 3)} HBAR</b> in network fees
-            (minting the order NFT).
+            Placing it costs at most <b className="font-mono">{formatAmount(placeFee, 18, 3)} HBAR</b> in network fees
+            (minting the order NFT and scheduling its checks); you pay only the gas it uses.
           </span>
         )}
       </div>

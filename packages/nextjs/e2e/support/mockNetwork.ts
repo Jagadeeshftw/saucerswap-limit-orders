@@ -313,7 +313,7 @@ const rpc = (s: Scenario, method: string, params: any[]): { result?: unknown; er
       };
     case "eth_sendTransaction": {
       const tx = params[0];
-      s.sent.push({ to: tx.to, data: tx.data, value: tx.value ?? "0x0" });
+      s.sent.push({ to: tx.to, data: tx.data, value: tx.value ?? "0x0", gas: tx.gas });
       if (s.send.kind === "rejected") return { error: { code: 4001, message: "User rejected the request." } };
       if (s.send.kind === "revert") return { error: { code: 3, message: "execution reverted", data: revertData(s) } };
       const hash = keccak256(toHex(`tx-${++txCounter}-${Date.now()}`));
@@ -379,7 +379,7 @@ const placedLog = (id: string) => ({
     args: { orderId: BigInt(id), marketId: 1n, maker: ACCOUNT },
   }),
   data: "0x",
-  timestamp: "1790702932.000000000",
+  timestamp: "1790748036.000000000",
   transaction_hash: pad(toHex(Number(id))),
 });
 

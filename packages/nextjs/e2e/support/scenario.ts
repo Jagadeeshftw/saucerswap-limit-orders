@@ -1,5 +1,5 @@
-import filledOrderLogs from "../../utils/orders/__fixtures__/order-1-logs.json";
-import heldOrderLogs from "../../utils/orders/__fixtures__/order-2-logs.json";
+import heldOrderLogs from "../../utils/orders/__fixtures__/order-3-held-logs.json";
+import filledOrderLogs from "../../utils/orders/__fixtures__/order-5-logs.json";
 
 /**
  * Everything the mocked network knows: wallet, balances, markets, guard readings, orders and mirror data.
@@ -63,7 +63,7 @@ export type Scenario = {
   mirrorLagSeconds: number;
   send: SendOutcome;
   /** Filled in by the mock as transactions arrive. */
-  sent: { to: string; data: string; value: string }[];
+  sent: { to: string; data: string; value: string; gas?: string }[];
 };
 
 const now = () => Math.floor(Date.now() / 1000);
@@ -135,16 +135,18 @@ export const withOrderBook = (s: Scenario): Scenario => {
       funded: false,
       budget: 69_060_000n,
     }),
-    "2": order({ triggerPrice: 10_000_000n, createdAt: 1_790_702_900, amountIn: 20_00_000_000n }),
-    "1": order({
+    "5": order({
       marketId: 2,
+      trigger: 1,
       status: 2,
       funded: false,
       budget: 0n,
-      createdAt: 1_790_702_900,
-      amountIn: 3_00_000_000n,
-      triggerPrice: 99_000_000n,
+      createdAt: 1_790_748_364,
+      amountIn: 50_000_000n,
+      triggerPrice: 100_000_000n,
+      slippageBps: 30,
     }),
+    "3": order({ triggerPrice: 10_000_000n, createdAt: 1_790_748_036, amountIn: 1_00_000_000n }),
     "9": order({
       status: 3,
       funded: false,
@@ -154,7 +156,7 @@ export const withOrderBook = (s: Scenario): Scenario => {
       amountIn: 120_00_000_000n,
     }),
   };
-  s.held = [14, 13, 12, 11, 9, 2, 1];
-  s.logs = { "1": filledOrderLogs, "2": heldOrderLogs };
+  s.held = [14, 13, 12, 11, 9, 5, 3];
+  s.logs = { "5": filledOrderLogs, "3": heldOrderLogs };
   return s;
 };

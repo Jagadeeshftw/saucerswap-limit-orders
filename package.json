@@ -23,6 +23,7 @@
     "foundry:format": "yarn workspace @sh/foundry format",
     "foundry:lint": "yarn workspace @sh/foundry lint",
     "foundry:lint-staged": "yarn workspace @sh/foundry lint-staged",
+    "foundry:pool-gap": "yarn workspace @sh/foundry pool-gap",
     "foundry:test": "yarn workspace @sh/foundry test",
     "foundry:test:fork": "yarn workspace @sh/foundry test:fork",
     "foundry:test:local": "yarn workspace @sh/foundry test:local",

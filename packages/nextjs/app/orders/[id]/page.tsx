@@ -12,6 +12,7 @@ import { useCollectionId, useOrder, useOrderTrail } from "~~/hooks/orders/useOrd
 import { vault } from "~~/hooks/orders/useVault";
 import { useVaultTx } from "~~/hooks/orders/useVaultTx";
 import { durationText } from "~~/utils/orders/budget";
+import { GAS_LIMIT } from "~~/utils/orders/gas";
 import { comparatorText, describeOrder, isOpen } from "~~/utils/orders/orders";
 import type { TrailEntry } from "~~/utils/orders/trail";
 import { formatAmount, formatHbar, formatPrice, parseAmount, tinybarToWeibar } from "~~/utils/orders/units";
@@ -79,6 +80,7 @@ const OrderDetail = () => {
       args: [order.id],
       value,
       chainId: vault.chainId,
+      gas: GAS_LIMIT[functionName],
     });
 
   return (
