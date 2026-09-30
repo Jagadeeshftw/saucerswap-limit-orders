@@ -55,7 +55,7 @@ const MARKETS = {
     baseIsToken0: false,
     active: true,
     guard: { twapWindow: 1800, maxDeviationBps: 200, maxOracleAge: 90_000, maxSlippageBps: 300 },
-    sweep: { interval: 300, maxOrders: 20, maxFills: 3 },
+    sweep: { minInterval: 300, maxInterval: 21_600, maxMoveBpsPerHour: 250, maxOrders: 20, maxFills: 3 },
   },
   2: {
     base: DAI,
@@ -73,7 +73,7 @@ const MARKETS = {
     baseIsToken0: false,
     active: true,
     guard: { twapWindow: 1800, maxDeviationBps: 100, maxOracleAge: 90_000, maxSlippageBps: 100 },
-    sweep: { interval: 300, maxOrders: 20, maxFills: 3 },
+    sweep: { minInterval: 300, maxInterval: 21_600, maxMoveBpsPerHour: 25, maxOrders: 20, maxFills: 3 },
   },
 } as const;
 
@@ -81,8 +81,8 @@ const MARKETS = {
  * Costs as the reference vault reported them on testnet (tinybar), and the vault's sharing rule:
  * each order pays an even share of the sweep's fixed gas plus its own check gas.
  */
-// checkCost, fillCost and minBudget as the live vault 0.0.10779995 returned them on 2026-09-30.
-const COSTS = { checkCost: 189_774_952n, fillHbarIn: 69_063_669n, fillTokenIn: 105_096_888n };
+// checkCost and fillCost (the fill plus the final check) as the live vault 0.0.10787941 returned them.
+const COSTS = { checkCost: 189_774_952n, fillHbarIn: 87_680_832n, fillTokenIn: 123_714_051n };
 const FIXED_GAS = 1_520_000n;
 const CHECK_GAS = 60_000n;
 const checkShared = (orders: bigint) => {
@@ -108,6 +108,22 @@ const zeroOf = (param: AbiParameter): unknown => {
   return 0n;
 };
 
+/** The vault's scheduling rule: wait as long as the price needs to reach the trigger, within the market's bounds. */
+const checkDelay = (marketId: number, trigger: number, triggerPrice: bigint, expiry: number, s: Scenario) => {
+  const { minInterval, maxInterval, maxMoveBpsPerHour } = MARKETS[marketId as 1 | 2].sweep;
+  const price = s.guards[marketId].oraclePrice;
+  const met = trigger === 0 ? price >= triggerPrice : price <= triggerPrice;
+  const diff = triggerPrice > price ? triggerPrice - price : price - triggerPrice;
+  const distance = met ? 0n : (diff * 10_000n) / price;
+  let wait = Number((distance * 3600n) / BigInt(maxMoveBpsPerHour));
+  wait = Math.min(wait, maxInterval, Math.max(0, expiry - Math.floor(Date.now() / 1000)));
+  return Math.max(wait, minInterval);
+};
+
+/** A stalled market's last schedule was due 25 minutes ago; a live one fires in about 3 hours. */
+const nextSweepAt = (s: Scenario, marketId: number) =>
+  Math.floor(Date.now() / 1000) + (s.stalled.includes(marketId) ? -1_500 : 10_800);
+
 const vaultCall = (s: Scenario, data: `0x${string}`) => {
   const { functionName, args = [] } = decodeFunctionData({ abi: vaultAbi, data });
   const result = (value: unknown) => encodeFunctionResult({ abi: vaultAbi, functionName, result: value as never });
@@ -130,7 +146,14 @@ const vaultCall = (s: Scenario, data: `0x${string}`) => {
     case "minBudget":
       return result(minBudget(Number(a[1]), Number(a[0])));
     case "sweeps":
-      return result([VAULT, BigInt(Math.floor(Date.now() / 1000) + 200), 0, s.fundedOrders[Number(a[0])] ?? 0]);
+      return result([VAULT, BigInt(nextSweepAt(s, Number(a[0]))), 0, s.fundedOrders[Number(a[0])] ?? 0, 1, 0]);
+    case "sweepStatus": {
+      const id = Number(a[0]);
+      if (!s.fundedOrders[id]) return result([0, 0n]);
+      return result([s.stalled.includes(id) ? 2 : 1, BigInt(nextSweepAt(s, id))]);
+    }
+    case "nextCheckDelay":
+      return result(BigInt(checkDelay(Number(a[0]), Number(a[1]), a[2] as bigint, Number(a[3]), s)));
     case "getOrder": {
       const o = s.orders[String(a[0])];
       return result(
@@ -199,6 +222,10 @@ const execute = (s: Scenario, tx: { to: string; data: `0x${string}`; value?: str
   }
   if (tx.to !== VAULT) return [];
   const { functionName, args = [] } = decodeFunctionData({ abi: vaultAbi, data: tx.data });
+  if (functionName === "restartSweep") {
+    s.stalled = s.stalled.filter(id => id !== Number((args as readonly bigint[])[0]));
+    return [];
+  }
   if (functionName !== "placeOrder") return [];
   const p = (args as readonly any[])[0];
   const id = Math.max(20, ...Object.keys(s.orders).map(Number)) + 1;

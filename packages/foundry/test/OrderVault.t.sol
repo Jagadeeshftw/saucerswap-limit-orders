@@ -18,19 +18,9 @@ import {
 import { MarketConfig } from "../script/MarketConfig.sol";
 import { OrderVaultBase } from "./OrderVaultBase.t.sol";
 import { MockHss } from "./mocks/MockHederaSystem.sol";
+import { HbarRejecter } from "./mocks/Actors.sol";
 
 /// @notice Rejects HBAR, like a contract holder without a payable fallback.
-contract HbarRejecter {
-    function cancel(OrderVault vault, uint256 orderId) external {
-        vault.cancel(orderId);
-    }
-
-    function associate(address collection) external {
-        (bool ok,) = collection.call(abi.encodeWithSignature("associate()"));
-        require(ok, "associate");
-    }
-}
-
 contract OrderVaultTest is OrderVaultBase {
     uint128 internal constant ABOVE_MARKET = 12_500_000; // 0.125 USDC per HBAR
     uint128 internal constant BELOW_MARKET = 10_000_000; // 0.100 USDC per HBAR
@@ -92,7 +82,18 @@ contract OrderVaultTest is OrderVaultBase {
     function test_updateMarket_boundsSweepInterval() public {
         GuardParams memory g = vault.getMarket(HBAR_MARKET).guard;
         SweepParams memory s = vault.getMarket(HBAR_MARKET).sweep;
-        s.interval = 29;
+        s.minInterval = 29;
+        vm.prank(owner);
+        vm.expectRevert(OrderVault.InvalidSweep.selector);
+        vault.updateMarket(HBAR_MARKET, g, s, true);
+
+        s.minInterval = 7 hours; // above maxInterval
+        vm.prank(owner);
+        vm.expectRevert(OrderVault.InvalidSweep.selector);
+        vault.updateMarket(HBAR_MARKET, g, s, true);
+
+        s.minInterval = 300;
+        s.maxMoveBpsPerHour = 0;
         vm.prank(owner);
         vm.expectRevert(OrderVault.InvalidSweep.selector);
         vault.updateMarket(HBAR_MARKET, g, s, true);
@@ -113,8 +114,9 @@ contract OrderVaultTest is OrderVaultBase {
         uint256 gas = uint256(c.scheduleGas) + c.sweepBaseGas + c.checkGas;
         uint256 tinycents = gas * c.gasPriceTinycents;
         tinycents += tinycents * c.safetyBps / 10_000;
-        // The mock exchange rate is testnet's: 30,000 HBAR per 231,199 cents.
-        assertEq(vault.checkCost(HBAR_MARKET), tinycents * 30_000 / 231_199);
+        assertEq(vault.checkCost(HBAR_MARKET), _tinybar(gas));
+        // The mock exchange rate is testnet's (30,000 HBAR per 231,199 cents); one lookup prices a whole call.
+        assertApproxEqAbs(vault.checkCost(HBAR_MARKET), tinycents * 30_000 / 231_199, 1);
     }
 
     function test_checkCostShared_fallsWithMoreOrders() public view {
@@ -146,9 +148,10 @@ contract OrderVaultTest is OrderVaultBase {
         assertEq(hss.count(), 1);
         MockHss.Scheduled memory next = hss.last();
         assertEq(next.to, address(vault));
-        assertEq(next.expiry, block.timestamp + 300);
+        // 0.125 is 12.0% above 0.1116; at 250 bps/h the price needs ~4.8 h to get there.
+        assertEq(next.expiry, block.timestamp + 17_280);
         assertEq(next.gasLimit, vault.sweepGasLimit(HBAR_MARKET));
-        assertEq(next.callData, abi.encodeCall(OrderVault.sweep, (HBAR_MARKET)));
+        assertEq(next.callData, abi.encodeCall(OrderVault.sweep, (HBAR_MARKET, uint32(1))));
     }
 
     function test_placeOrder_secondOrderReusesRunningSweep() public {
@@ -279,7 +282,8 @@ contract OrderVaultTest is OrderVaultBase {
 
     function test_cancel_refundsEscrowAndBudgetAndWipesNft() public {
         uint256 orderId = _sellHbar(alice, ABOVE_MARKET, Trigger.AtOrAbove);
-        uint256 budget = vault.getOrder(orderId).budget;
+        // The last funded order leaving pays for the pending sweep's empty run.
+        uint256 budget = vault.getOrder(orderId).budget - _idleSweep();
         uint256 before = alice.balance;
 
         vm.expectEmit(address(vault));
@@ -331,7 +335,7 @@ contract OrderVaultTest is OrderVaultBase {
         HbarRejecter holder = new HbarRejecter();
         holder.associate(address(nft));
         uint256 orderId = _sellHbar(alice, ABOVE_MARKET, Trigger.AtOrAbove);
-        uint256 budget = vault.getOrder(orderId).budget;
+        uint256 budget = vault.getOrder(orderId).budget - _idleSweep();
         vm.prank(alice);
         nft.transferFrom(alice, address(holder), orderId);
 
@@ -366,7 +370,7 @@ contract OrderVaultTest is OrderVaultBase {
         assertEq(vault.getOrder(orderId).budget, budget - share);
         assertEq(vault.totalBudgets(), budget - share);
         assertEq(hss.count(), 2, "rescheduled");
-        assertEq(hss.last().expiry, block.timestamp + 300);
+        assertEq(hss.last().expiry, block.timestamp + 17_280, "the price hasn't moved, so the same wait");
         assertEq(uint8(vault.getOrder(orderId).status), uint8(Status.Open));
     }
 
@@ -432,21 +436,20 @@ contract OrderVaultTest is OrderVaultBase {
 
     function test_sweep_holdsFillWhenPoolDeviatesFromOracle() public {
         uint256 orderId = _sellHbar(alice, ABOVE_MARKET, Trigger.AtOrAbove);
-        (, uint40 at,,) = vault.sweeps(HBAR_MARKET);
+        uint256 at = hss.last().expiry;
         vm.warp(at);
         hbarFeed.set(13_000_000, at); // Chainlink moves to 0.13, the pool stays at 0.1116
 
         vm.expectEmit(true, false, false, false, address(vault));
         emit OrderVault.FillHeld(orderId, GuardState.DeviationTooHigh, 0, 0);
-        vm.prank(address(vault));
-        vault.sweep(HBAR_MARKET);
+        _runScheduledSweep(HBAR_MARKET);
         assertEq(uint8(vault.getOrder(orderId).status), uint8(Status.Open));
     }
 
     function test_sweep_holdsFillWhenOracleStale() public {
         uint256 orderId = _sellHbar(alice, ABOVE_MARKET, Trigger.AtOrAbove);
         _setHbarPrice(13_000_000);
-        (, uint40 at,,) = vault.sweeps(HBAR_MARKET);
+        uint256 at = hss.last().expiry;
         hbarFeed.set(13_000_000, at - 90_001); // older than maxOracleAge when the sweep runs
         _runScheduledSweep(HBAR_MARKET);
 
@@ -487,9 +490,9 @@ contract OrderVaultTest is OrderVaultBase {
     function test_sweep_expiresOrderAndRefunds() public {
         uint256 orderId = _buyHbar(alice, BELOW_MARKET, Trigger.AtOrBelow);
         uint256 before = usdc.balanceOf(alice);
-        vm.warp(block.timestamp + 7 days);
+        vm.warp(block.timestamp + 7 days); // the scheduled sweep fires late
         vm.prank(address(vault));
-        vault.sweep(HBAR_MARKET);
+        vault.sweep(HBAR_MARKET, _epoch(HBAR_MARKET));
 
         assertEq(uint8(vault.getOrder(orderId).status), uint8(Status.Expired));
         assertEq(usdc.balanceOf(alice), before + 50e6);
@@ -503,12 +506,17 @@ contract OrderVaultTest is OrderVaultBase {
             _runScheduledSweep(HBAR_MARKET);
         }
         assertTrue(vault.getOrder(orderId).funded, "six checks are prepaid");
+        uint256 before = vault.getOrder(orderId).budget;
+        uint256 surplusBefore = vault.surplus();
         _runScheduledSweep(HBAR_MARKET);
         Order memory o = vault.getOrder(orderId);
         assertFalse(o.funded);
-        assertGe(o.budget, vault.fillCost(HBAR_MARKET, Side.SellBase), "fill reserve is kept");
-        uint256 schedules = hss.count();
-        assertEq(schedules, 7, "the chain stops once no order is funded");
+        Costs memory c = MarketConfig.costs();
+        // The chain's last sweep is paid from the order's reserve, not the vault's spare HBAR.
+        assertEq(before - o.budget, _tinybar(uint256(c.sweepBaseGas) + c.checkGas), "pays for its final sweep");
+        assertEq(vault.surplus() - surplusBefore, before - o.budget);
+        assertGe(o.budget, _tinybar(uint256(c.fillGasHbarIn) + c.settleGas), "the fill is still covered");
+        assertEq(hss.count(), 7, "the chain stops once no order is funded");
     }
 
     function test_topUp_revivesParkedOrderAndRestartsSweep() public {
@@ -538,7 +546,7 @@ contract OrderVaultTest is OrderVaultBase {
         uint256 orderId = _sellHbar(alice, ABOVE_MARKET, Trigger.AtOrAbove);
         uint256 budget = vault.getOrder(orderId).budget;
         vm.prank(keeper);
-        vault.sweep(HBAR_MARKET);
+        vault.sweep(HBAR_MARKET, 0);
         assertEq(vault.getOrder(orderId).budget, budget);
         assertEq(hss.count(), 1);
     }
@@ -570,26 +578,26 @@ contract OrderVaultTest is OrderVaultBase {
         emit OrderVault.SweepScheduleFailed(HBAR_MARKET, 355);
         vm.prank(alice);
         vault.placeOrder{ value: 250e8 + budget }(p);
-        (address pending,,,) = vault.sweeps(HBAR_MARKET);
+        (address pending,,,,,) = vault.sweeps(HBAR_MARKET);
         assertEq(pending, address(0));
 
         hss.forceCode(0);
         vm.prank(keeper);
         vault.restartSweep(HBAR_MARKET);
-        (pending,,,) = vault.sweeps(HBAR_MARKET);
+        (pending,,,,,) = vault.sweeps(HBAR_MARKET);
         assertTrue(pending != address(0));
     }
 
     function test_restartSweep_revertsWhileAlive() public {
         _sellHbar(alice, ABOVE_MARKET, Trigger.AtOrAbove);
-        (, uint40 at,,) = vault.sweeps(HBAR_MARKET);
+        (, uint40 at,,,,) = vault.sweeps(HBAR_MARKET);
         vm.expectRevert(abi.encodeWithSelector(OrderVault.SweepAlive.selector, HBAR_MARKET, uint256(at)));
         vault.restartSweep(HBAR_MARKET);
     }
 
     function test_restartSweep_worksAfterMissedExpiry() public {
         _sellHbar(alice, ABOVE_MARKET, Trigger.AtOrAbove);
-        vm.warp(block.timestamp + 300 + 121); // the scheduled sweep never fired
+        vm.warp(hss.last().expiry + 121); // the scheduled sweep never fired
         vault.restartSweep(HBAR_MARKET);
         assertEq(hss.count(), 2);
     }
@@ -602,12 +610,12 @@ contract OrderVaultTest is OrderVaultBase {
     function test_sweep_findsCapacityOrFallsBack() public {
         hss.setNoCapacity(true);
         _sellHbar(alice, ABOVE_MARKET, Trigger.AtOrAbove);
-        assertEq(hss.last().expiry, block.timestamp + 300, "falls back to the target second");
+        assertEq(hss.last().expiry, block.timestamp + 17_280, "falls back to the target second");
     }
 
     // ------------------------------------------------------------------ manual execution
 
-    function test_executeOrder_fillsWithoutDebit() public {
+    function test_executeOrder_fillsWithoutCheckDebit() public {
         uint256 orderId = _sellHbar(alice, ABOVE_MARKET, Trigger.AtOrAbove);
         uint256 budget = vault.getOrder(orderId).budget;
         _setHbarPrice(13_000_000);
@@ -615,7 +623,8 @@ contract OrderVaultTest is OrderVaultBase {
 
         vm.prank(keeper);
         assertTrue(vault.executeOrder(orderId));
-        assertEq(alice.balance, before + budget, "whole budget refunded");
+        // The keeper paid for the check; the order only pays for the pending sweep it leaves behind.
+        assertEq(alice.balance, before + budget - _idleSweep(), "budget refunded");
     }
 
     function test_executeOrder_returnsFalseWhenTriggerNotMet() public {

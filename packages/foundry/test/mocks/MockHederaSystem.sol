@@ -74,6 +74,8 @@ contract MockHts {
     mapping(address account => mapping(address token => bool)) public associations;
     int64 public forcedCreateCode;
     int64 public forcedAssociateCode;
+    int64 public forcedMintCode;
+    int64 public forcedWipeCode;
     uint256 public lastCreateValue;
 
     function forceCreateCode(int64 code) external {
@@ -82,6 +84,14 @@ contract MockHts {
 
     function forceAssociateCode(int64 code) external {
         forcedAssociateCode = code;
+    }
+
+    function forceMintCode(int64 code) external {
+        forcedMintCode = code;
+    }
+
+    function forceWipeCode(int64 code) external {
+        forcedWipeCode = code;
     }
 
     function createNonFungibleToken(IHederaTokenService.HederaToken memory token)
@@ -98,6 +108,7 @@ contract MockHts {
 
     function mintToken(address token, int64, bytes[] memory) external returns (int64, int64, int64[] memory serials) {
         serials = new int64[](1);
+        if (forcedMintCode != 0) return (forcedMintCode, 0, serials);
         serials[0] = MockNftCollection(token).mint(treasuryOf[token]);
         return (SUCCESS, int64(uint64(MockNftCollection(token).totalSupply())), serials);
     }
@@ -108,6 +119,7 @@ contract MockHts {
     }
 
     function wipeTokenAccountNFT(address token, address account, int64[] memory serials) external returns (int64) {
+        if (forcedWipeCode != 0) return forcedWipeCode;
         if (account == treasuryOf[token]) return INVALID_TREASURY;
         return MockNftCollection(token).remove(account, uint256(uint64(serials[0]))) ? SUCCESS : INVALID_NFT_ID;
     }
@@ -135,6 +147,7 @@ contract MockHss {
     }
 
     Scheduled[] public scheduled;
+    uint256 public busyUntil;
     int64 public forcedCode;
     bool public noCapacity;
 
@@ -156,11 +169,20 @@ contract MockHss {
     }
 
     function hasScheduleCapacity(uint256 expiry, uint256) external view returns (bool) {
-        return !noCapacity && expiry > block.timestamp;
+        return !noCapacity && expiry > block.timestamp && expiry >= busyUntil;
+    }
+
+    /// @notice Every second before `until` is full, as when many contracts schedule at once.
+    function setBusyUntil(uint256 until) external {
+        busyUntil = until;
     }
 
     function count() external view returns (uint256) {
         return scheduled.length;
+    }
+
+    function job(uint256 index) external view returns (Scheduled memory) {
+        return scheduled[index];
     }
 
     function last() external view returns (Scheduled memory) {

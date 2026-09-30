@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import { Test, console2 } from "forge-std/Test.sol";
+import { Test, Vm, console2 } from "forge-std/Test.sol";
 import { OrderVault } from "../contracts/OrderVault.sol";
 import { PriceMath } from "../contracts/libraries/PriceMath.sol";
-import { Order, PlaceParams, Side, Status, Trigger } from "../contracts/types/OrderTypes.sol";
+import { Market, Order, PlaceParams, Side, Status, Trigger } from "../contracts/types/OrderTypes.sol";
 import { OrderVaultBase } from "./OrderVaultBase.t.sol";
 import { MockAggregator, MockPool, MockRouter, MockToken } from "./mocks/MockMarket.sol";
-import { MockNftCollection } from "./mocks/MockHederaSystem.sol";
+import { MockHss, MockNftCollection } from "./mocks/MockHederaSystem.sol";
 
 /// @notice Drives random sequences of user, keeper, market and scheduler actions against the vault.
 contract VaultHandler is Test {
@@ -23,6 +23,14 @@ contract VaultHandler is Test {
     MockPool[3] internal pools;
     address[] public actors;
     uint256[] public orderIds;
+
+    MockHss internal constant HSS = MockHss(address(0x16b));
+    mapping(uint256 jobIndex => bool) internal ran;
+    /// @notice Scheduled sweeps that reverted. HSS would drop them silently, killing the market's checks.
+    uint256 public failedJobs;
+    uint256 public jobsRun;
+    /// @notice When a scheduled sweep last looked at each order (or when it was placed or revived).
+    mapping(uint256 orderId => uint256) public lastLooked;
 
     constructor(
         OrderVault vault_,
@@ -90,6 +98,7 @@ contract VaultHandler is Test {
             uint256 orderId
         ) {
             orderIds.push(orderId);
+            lastLooked[orderId] = block.timestamp;
         } catch { }
     }
 
@@ -105,8 +114,11 @@ contract VaultHandler is Test {
 
     function topUp(uint256 seed, uint256 amount) external {
         if (orderIds.length == 0) return;
+        uint256 orderId = orderIds[seed % orderIds.length];
+        bool wasFunded = vault.getOrder(orderId).funded;
         vm.prank(actors[seed % actors.length]);
-        try vault.topUp{ value: bound(amount, 1, 30e8) }(orderIds[seed % orderIds.length]) { } catch { }
+        try vault.topUp{ value: bound(amount, 1, 30e8) }(orderId) { } catch { }
+        if (!wasFunded && vault.getOrder(orderId).funded) lastLooked[orderId] = block.timestamp;
     }
 
     function transferNft(uint256 seed, uint256 toSeed) external {
@@ -134,13 +146,53 @@ contract VaultHandler is Test {
         router.setRate(address(usdc), address(base), RAY * 1e10 / next);
     }
 
-    function scheduledSweep(bool daiMarket) external {
-        uint256 id = daiMarket ? 2 : 1;
-        (address pending, uint40 at,,) = vault.sweeps(id);
-        if (pending == address(0)) return;
+    /// @dev Let HSS run the next schedule that is due, jumping the clock to it.
+    function scheduledSweep() external {
+        (uint256 index, uint256 at) = _earliestPending();
+        if (index == type(uint256).max) return;
         if (at > block.timestamp) vm.warp(at);
+        _runJob(index);
+    }
+
+    /// @dev Every schedule HSS accepted, superseded ones included, runs at its second with its own gas limit.
+    function _runDueUntil(uint256 until) internal {
+        while (true) {
+            (uint256 index, uint256 at) = _earliestPending();
+            if (index == type(uint256).max || at > until) break;
+            if (at > block.timestamp) vm.warp(at);
+            _runJob(index);
+        }
+        if (until > block.timestamp) vm.warp(until);
+    }
+
+    function _earliestPending() internal view returns (uint256 index, uint256 at) {
+        index = type(uint256).max;
+        at = type(uint256).max;
+        for (uint256 i; i < HSS.count(); ++i) {
+            if (ran[i]) continue;
+            uint256 expiry = HSS.job(i).expiry;
+            if (expiry < at) (index, at) = (i, expiry);
+        }
+    }
+
+    function _runJob(uint256 index) internal {
+        ran[index] = true;
+        MockHss.Scheduled memory job = HSS.job(index);
+        vm.recordLogs();
         vm.prank(address(vault));
-        vault.sweep(id);
+        (bool ok,) = job.to.call{ gas: job.gasLimit }(job.callData);
+        jobsRun++;
+        if (!ok) failedJobs++;
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter != address(vault) || logs[i].topics.length < 2) continue;
+            bytes32 t = logs[i].topics[0];
+            if (
+                t == OrderVault.OrderChecked.selector || t == OrderVault.BudgetExhausted.selector
+                    || t == OrderVault.FillHeld.selector || t == OrderVault.FillFailed.selector
+                    || t == OrderVault.OrderFilled.selector || t == OrderVault.OrderExpired.selector
+            ) lastLooked[uint256(logs[i].topics[1])] = block.timestamp;
+        }
     }
 
     function manualExecute(uint256 seed, uint256 actorSeed) external {
@@ -153,8 +205,9 @@ contract VaultHandler is Test {
         try vault.restartSweep(daiMarket ? 2 : 1) { } catch { }
     }
 
+    /// @dev Time passes; HSS runs whatever falls due on the way.
     function warp(uint256 seconds_) external {
-        vm.warp(block.timestamp + bound(seconds_, 1, 6 hours));
+        _runDueUntil(block.timestamp + bound(seconds_, 1, 6 hours));
     }
 
     function blockUsdc(uint256 actorSeed, bool blocked) external {
@@ -254,7 +307,7 @@ contract OrderVaultInvariantTest is OrderVaultBase {
                 assertTrue(nft.ownerOf(open[i]) != address(0), "open orders have a holder");
                 if (o.funded) funded++;
             }
-            (,,, uint32 fundedOrders) = vault.sweeps(m);
+            (,,, uint32 fundedOrders,,) = vault.sweeps(m);
             assertEq(fundedOrders, funded, "funded counter");
             uint256 openCount;
             for (uint256 i; i < handler.orderCount(); ++i) {
@@ -262,6 +315,24 @@ contract OrderVaultInvariantTest is OrderVaultBase {
                 if (o.status == Status.Open && o.marketId == m) openCount++;
             }
             assertEq(open.length, openCount, "every open order is listed");
+        }
+    }
+
+    /// @notice Liveness: every funded open order is looked at by a scheduled sweep within its market's longest
+    ///         wait (plus rotation when more orders are open than one sweep checks), and no scheduled sweep reverts.
+    function invariant_fundedOrdersAreChecked() public view {
+        assertEq(handler.failedJobs(), 0, "a scheduled sweep reverted");
+        for (uint256 i; i < handler.orderCount(); ++i) {
+            uint256 id = handler.orderIds(i);
+            Order memory o = vault.getOrder(id);
+            if (o.status != Status.Open || !o.funded) continue;
+            Market memory market = vault.getMarket(o.marketId);
+            uint256 open = vault.openOrders(o.marketId).length;
+            uint256 limit = uint256(market.sweep.maxInterval) + (open / market.sweep.maxOrders + 2)
+                * uint256(market.sweep.minInterval) + 250;
+            assertLe(block.timestamp - handler.lastLooked(id), limit, "funded order went unchecked");
+            (, uint40 nextSweepAt,,,,) = vault.sweeps(o.marketId);
+            assertGe(uint256(nextSweepAt) + 120, block.timestamp, "a funded market has a live schedule");
         }
     }
 
@@ -273,6 +344,7 @@ contract OrderVaultInvariantTest is OrderVaultBase {
         }
         console2.log("open, filled, cancelled, expired", byStatus[1], byStatus[2], byStatus[3]);
         console2.log("  expired", byStatus[4]);
+        console2.log("  scheduled sweeps run", handler.jobsRun());
     }
 
     /// @notice A settled order's NFT is gone.

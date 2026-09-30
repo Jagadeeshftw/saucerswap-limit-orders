@@ -42,6 +42,10 @@ export const explainError = (error: unknown): string => {
       return "There is nothing to claim.";
     case "TransferFailed":
       return "A token transfer failed. Check your balance and that the vault is approved to spend it.";
+    case "SweepAlive":
+      return "Checks are already running for this market; the next one is scheduled.";
+    case "NoFundedOrders":
+      return "No order in this market has budget left, so there is nothing to restart. Top up an order instead.";
     case "HtsError": {
       const code = Number(args[1]);
       return `Hedera rejected ${HTS_OPERATION[Number(args[0])] ?? "the token operation"}: ${HTS_CODES[code] ?? `response code ${code}`}.`;

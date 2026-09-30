@@ -2,6 +2,7 @@ import { mockNetwork } from "./support/mockNetwork";
 import { DAI, type Scenario, baseScenario, withOrderBook } from "./support/scenario";
 import { connectWallet, injectWallet, switchWalletChain } from "./support/wallet";
 import { type Page, type TestInfo, expect, test } from "@playwright/test";
+import { toFunctionSelector } from "viem";
 
 /** With SCREENSHOTS_DIR set, every state is captured in light and dark at the project's width. */
 const capture = async (page: Page, info: TestInfo, state: string) => {
@@ -45,7 +46,8 @@ test.describe("Trade", () => {
       "Sells 1,000 DAI when Chainlink shows DAI at or above 1.0100 USDC",
     );
     await expect(page.getByTestId("ticket-summary")).toContainText("You receive at least 1,004.95 USDC");
-    await expect(page.getByTestId("budget-line")).toContainText("1.8977 HBAR per check");
+    await expect(page.getByTestId("budget-line")).toContainText("covers the whole 1 day");
+    await expect(page.getByTestId("budget-line")).toContainText("at 1.8977 HBAR each");
     await capture(page, info, "02-trade-guard-open");
   });
 
@@ -61,6 +63,7 @@ test.describe("Trade", () => {
     await open(page, s, "/");
     await expect(page.getByTestId("guard-banner")).toContainText("Guard closed");
     await expect(page.getByTestId("guard-banner")).toContainText("has not updated within the allowed age");
+    await expect(page.getByText(/updated \d+ h ago, max age 1 d/)).toBeVisible();
     await capture(page, info, "03-trade-oracle-stale");
   });
 
@@ -147,14 +150,40 @@ test.describe("Trade", () => {
 
   test("explains a failed transaction in plain words", async ({ page }, info) => {
     const s = baseScenario();
-    s.send = { kind: "revert", errorName: "InsufficientBudget", args: [1n, 1_207_713_381n] };
+    s.send = { kind: "revert", errorName: "InsufficientBudget", args: [1n, 1_226_330_544n] };
     await open(page, s, "/");
     await fillTicket(page, "20", "0.1100");
     await page.getByTestId("place-order").click();
     await expect(page.getByTestId("tx-error")).toContainText(
-      "The check budget is too small: send at least 12.0771 HBAR.",
+      "The check budget is too small: send at least 12.2633 HBAR.",
     );
     await capture(page, info, "12-tx-failed");
+  });
+
+  test("sizes the budget to cover the whole expiry", async ({ page }, info) => {
+    await open(page, baseScenario(), "/?market=2");
+    await fillTicket(page, "1000", "1.0100");
+    const expiry = page.locator("#expiry");
+    await expect(expiry.locator("option").nth(2)).toContainText(/7 days · [\d.,]+ HBAR budget/);
+    await expiry.selectOption({ label: await expiry.locator("option").nth(2).innerText() });
+    // 1.01 is 102 bps above 0.9998; at 25 bps/h DAI is checked every 4 h, 42 times in 7 days.
+    await expect(page.getByTestId("budget-line")).toContainText("covers the whole 7 days");
+    await expect(page.getByTestId("budget-line")).toContainText("about every 4 h, so 42 checks");
+    await capture(page, info, "27-trade-budget-covers-expiry");
+  });
+
+  test("shows when a market's checks have stopped and lets anyone restart them", async ({ page }, info) => {
+    const s = baseScenario();
+    s.stalled = [1];
+    await open(page, s, "/");
+    const banner = page.getByTestId("checks-stopped");
+    await expect(banner).toContainText("Checks stopped");
+    await expect(banner).toContainText("never ran");
+    await capture(page, info, "28-trade-checks-stopped");
+    await banner.getByRole("button", { name: "Restart checks" }).click();
+    // Once the restart confirms the market is healthy again and the banner goes away.
+    await expect(banner).toHaveCount(0);
+    expect(s.sent.at(-1)?.data.startsWith(toFunctionSelector("function restartSweep(uint256)"))).toBe(true);
   });
 
   test("places an order and links to it", async ({ page }, info) => {
@@ -220,6 +249,20 @@ test.describe("Order detail", () => {
       /hashscan\.io\/testnet\/transaction\/\d+\.\d+/,
     );
     await capture(page, info, "17-order-held");
+  });
+
+  test("warns on an order whose market checks have stopped", async ({ page }, info) => {
+    const s = withOrderBook(baseScenario());
+    s.stalled = [1];
+    await open(page, s, "/orders/14");
+    await expect(page.getByTestId("checks-stopped")).toBeVisible();
+    await expect(page.getByTestId("next-check")).toHaveCount(0);
+    await capture(page, info, "29-order-checks-stopped");
+  });
+
+  test("shows when the market next checks an open order", async ({ page }) => {
+    await open(page, withOrderBook(baseScenario()), "/orders/14");
+    await expect(page.getByTestId("next-check")).toHaveText(/in (2|3) h/);
   });
 
   test("shows a filled order", async ({ page }, info) => {

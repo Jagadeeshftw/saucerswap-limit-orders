@@ -7,7 +7,7 @@ import { GenericContractsDeclaration } from "~~/utils/scaffold-hbar/contract";
 const deployedContracts = {
   296: {
     OrderVault: {
-      address: "0xf50e10ab7b6b9b71d4d74464a5df2e0d764353d1",
+      address: "0x86867b8261f07b2be5427692417bb6b36e4e644a",
       abi: [
         {
           type: "constructor",
@@ -59,6 +59,11 @@ const deployedContracts = {
                 },
                 {
                   name: "settleGas",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "idleSweepGas",
                   type: "uint32",
                   internalType: "uint32",
                 },
@@ -227,6 +232,11 @@ const deployedContracts = {
               internalType: "uint32",
             },
             {
+              name: "idleSweepGas",
+              type: "uint32",
+              internalType: "uint32",
+            },
+            {
               name: "gasPriceTinycents",
               type: "uint32",
               internalType: "uint32",
@@ -356,61 +366,6 @@ const deployedContracts = {
         },
         {
           type: "function",
-          name: "getCosts",
-          inputs: [],
-          outputs: [
-            {
-              name: "",
-              type: "tuple",
-              internalType: "struct Costs",
-              components: [
-                {
-                  name: "scheduleGas",
-                  type: "uint32",
-                  internalType: "uint32",
-                },
-                {
-                  name: "sweepBaseGas",
-                  type: "uint32",
-                  internalType: "uint32",
-                },
-                {
-                  name: "checkGas",
-                  type: "uint32",
-                  internalType: "uint32",
-                },
-                {
-                  name: "fillGasHbarIn",
-                  type: "uint32",
-                  internalType: "uint32",
-                },
-                {
-                  name: "fillGasTokenIn",
-                  type: "uint32",
-                  internalType: "uint32",
-                },
-                {
-                  name: "settleGas",
-                  type: "uint32",
-                  internalType: "uint32",
-                },
-                {
-                  name: "gasPriceTinycents",
-                  type: "uint32",
-                  internalType: "uint32",
-                },
-                {
-                  name: "safetyBps",
-                  type: "uint16",
-                  internalType: "uint16",
-                },
-              ],
-            },
-          ],
-          stateMutability: "view",
-        },
-        {
-          type: "function",
           name: "getMarket",
           inputs: [
             {
@@ -528,9 +483,19 @@ const deployedContracts = {
                   internalType: "struct SweepParams",
                   components: [
                     {
-                      name: "interval",
+                      name: "minInterval",
                       type: "uint32",
                       internalType: "uint32",
+                    },
+                    {
+                      name: "maxInterval",
+                      type: "uint32",
+                      internalType: "uint32",
+                    },
+                    {
+                      name: "maxMoveBpsPerHour",
+                      type: "uint16",
+                      internalType: "uint16",
                     },
                     {
                       name: "maxOrders",
@@ -820,9 +785,19 @@ const deployedContracts = {
                   internalType: "struct SweepParams",
                   components: [
                     {
-                      name: "interval",
+                      name: "minInterval",
                       type: "uint32",
                       internalType: "uint32",
+                    },
+                    {
+                      name: "maxInterval",
+                      type: "uint32",
+                      internalType: "uint32",
+                    },
+                    {
+                      name: "maxMoveBpsPerHour",
+                      type: "uint16",
+                      internalType: "uint16",
                     },
                     {
                       name: "maxOrders",
@@ -874,6 +849,40 @@ const deployedContracts = {
               name: "side",
               type: "uint8",
               internalType: "enum Side",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "nextCheckDelay",
+          inputs: [
+            {
+              name: "marketId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "trigger",
+              type: "uint8",
+              internalType: "enum Trigger",
+            },
+            {
+              name: "triggerPrice",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "expiry",
+              type: "uint256",
+              internalType: "uint256",
             },
           ],
           outputs: [
@@ -1046,6 +1055,11 @@ const deployedContracts = {
                   internalType: "uint32",
                 },
                 {
+                  name: "idleSweepGas",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
                   name: "gasPriceTinycents",
                   type: "uint32",
                   internalType: "uint32",
@@ -1083,6 +1097,11 @@ const deployedContracts = {
               type: "uint256",
               internalType: "uint256",
             },
+            {
+              name: "epoch",
+              type: "uint32",
+              internalType: "uint32",
+            },
           ],
           outputs: [],
           stateMutability: "nonpayable",
@@ -1100,6 +1119,30 @@ const deployedContracts = {
           outputs: [
             {
               name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "sweepStatus",
+          inputs: [
+            {
+              name: "marketId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "status",
+              type: "uint8",
+              internalType: "enum SweepStatus",
+            },
+            {
+              name: "nextSweepAt",
               type: "uint256",
               internalType: "uint256",
             },
@@ -1136,6 +1179,16 @@ const deployedContracts = {
               name: "fundedOrders",
               type: "uint32",
               internalType: "uint32",
+            },
+            {
+              name: "epoch",
+              type: "uint32",
+              internalType: "uint32",
+            },
+            {
+              name: "heldStreak",
+              type: "uint8",
+              internalType: "uint8",
             },
           ],
           stateMutability: "view",
@@ -1240,9 +1293,19 @@ const deployedContracts = {
               internalType: "struct SweepParams",
               components: [
                 {
-                  name: "interval",
+                  name: "minInterval",
                   type: "uint32",
                   internalType: "uint32",
+                },
+                {
+                  name: "maxInterval",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "maxMoveBpsPerHour",
+                  type: "uint16",
+                  internalType: "uint16",
                 },
                 {
                   name: "maxOrders",
@@ -1264,40 +1327,6 @@ const deployedContracts = {
           ],
           outputs: [],
           stateMutability: "nonpayable",
-        },
-        {
-          type: "function",
-          name: "valueAt",
-          inputs: [
-            {
-              name: "marketId",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
-              name: "side",
-              type: "uint8",
-              internalType: "enum Side",
-            },
-            {
-              name: "amountIn",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
-              name: "price",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          outputs: [
-            {
-              name: "",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          stateMutability: "view",
         },
         {
           type: "function",
@@ -1437,6 +1466,11 @@ const deployedContracts = {
                 },
                 {
                   name: "settleGas",
+                  type: "uint32",
+                  internalType: "uint32",
+                },
+                {
+                  name: "idleSweepGas",
                   type: "uint32",
                   internalType: "uint32",
                 },
@@ -1867,6 +1901,31 @@ const deployedContracts = {
         },
         {
           type: "event",
+          name: "SweepBroughtForward",
+          inputs: [
+            {
+              name: "orderId",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+            {
+              name: "charged",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+            {
+              name: "budgetLeft",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
           name: "SweepExecuted",
           inputs: [
             {
@@ -1945,6 +2004,31 @@ const deployedContracts = {
             },
             {
               name: "executeAt",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+            {
+              name: "epoch",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "SweepSuperseded",
+          inputs: [
+            {
+              name: "marketId",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+            {
+              name: "epoch",
               type: "uint256",
               indexed: false,
               internalType: "uint256",
@@ -2219,7 +2303,7 @@ const deployedContracts = {
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 41144246,
+      deployedOnBlock: 41165981,
     },
   },
 } as const;

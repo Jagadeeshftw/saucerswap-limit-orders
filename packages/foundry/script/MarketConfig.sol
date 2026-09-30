@@ -26,6 +26,8 @@ library MarketConfig {
     /// @notice Gas per unit of work, calibrated from scheduled sweeps of the reference vault on testnet:
     ///         a held check with reschedule used ~1,579k gas and a DAI fill without reschedule ~1,029k.
     ///         852 tinycents per gas is Hedera's USD gas price (~110 tinybar at the testnet rate).
+    ///         scheduleGas is the network's fixed ~$0.12 ScheduleCreate fee: 1,410,346 gas measured in
+    ///         isolation, the same for any gas limit, delay or calldata size.
     function costs() internal pure returns (Costs memory) {
         return Costs({
             scheduleGas: 1_425_000,
@@ -34,6 +36,7 @@ library MarketConfig {
             fillGasHbarIn: 450_000,
             fillGasTokenIn: 750_000,
             settleGas: 125_000,
+            idleSweepGas: 95_000,
             gasPriceTinycents: 852,
             safetyBps: 1_000
         });
@@ -52,7 +55,9 @@ library MarketConfig {
         m.pool = ISaucerSwapV2Pool(POOL_HBAR_USDC);
         m.poolFee = 3000;
         m.guard = GuardParams({ twapWindow: 1800, maxDeviationBps: 200, maxOracleAge: 90_000, maxSlippageBps: 300 });
-        m.sweep = SweepParams({ interval: 300, maxOrders: 20, maxFills: 3 });
+        // HBAR can move a few percent in an hour; a limit 10% away is checked about every 4 h.
+        m.sweep =
+            SweepParams({ minInterval: 300, maxInterval: 6 hours, maxMoveBpsPerHour: 250, maxOrders: 20, maxFills: 3 });
     }
 
     /// @notice DAI priced in USDC on the 0.05% pool, which tracks Chainlink closely: the depeg stop-loss market.
@@ -66,6 +71,8 @@ library MarketConfig {
         m.pool = ISaucerSwapV2Pool(POOL_USDC_DAI);
         m.poolFee = 500;
         m.guard = GuardParams({ twapWindow: 1800, maxDeviationBps: 100, maxOracleAge: 90_000, maxSlippageBps: 100 });
-        m.sweep = SweepParams({ interval: 300, maxOrders: 20, maxFills: 3 });
+        // A stablecoin drifts slowly until it depegs; a stop 50 bps away is checked about every 2 h.
+        m.sweep =
+            SweepParams({ minInterval: 300, maxInterval: 6 hours, maxMoveBpsPerHour: 25, maxOrders: 20, maxFills: 3 });
     }
 }

@@ -5,11 +5,13 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useAccount } from "wagmi";
 import { MirrorLagNotice, StatusBadge } from "~~/components/orders/StatusBits";
+import { SweepStatusBanner } from "~~/components/orders/SweepStatusBanner";
 import { TxStatus } from "~~/components/orders/TxStatus";
-import { legs, useContractEntityId } from "~~/hooks/orders/useMarkets";
+import { SweepStatus, legs, useContractEntityId, useSweepStatus } from "~~/hooks/orders/useMarkets";
 import { useCollectionId, useOrder, useOrderTrail } from "~~/hooks/orders/useOrders";
 import { vault } from "~~/hooks/orders/useVault";
 import { useVaultTx } from "~~/hooks/orders/useVaultTx";
+import { durationText } from "~~/utils/orders/budget";
 import { comparatorText, describeOrder, isOpen } from "~~/utils/orders/orders";
 import type { TrailEntry } from "~~/utils/orders/trail";
 import { formatAmount, formatHbar, formatPrice, parseAmount, tinybarToWeibar } from "~~/utils/orders/units";
@@ -49,6 +51,7 @@ const OrderDetail = () => {
   const collectionId = useCollectionId();
   const tx = useVaultTx();
   const [topUpText, setTopUpText] = useState("5");
+  const sweep = useSweepStatus(order?.market.id);
 
   if (isLoading)
     return <p className="mx-auto w-full max-w-6xl px-4 py-8 text-sm text-base-content/70">Loading order…</p>;
@@ -98,6 +101,7 @@ const OrderDetail = () => {
         </p>
       </div>
       <MirrorLagNotice />
+      {open && <SweepStatusBanner marketId={order.market.id} />}
 
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
         <section className="grid gap-2 rounded-2xl border border-base-300 bg-base-100 p-5" aria-label="Order trail">
@@ -162,6 +166,18 @@ const OrderDetail = () => {
             <Row label={open ? "Budget left" : "Budget"}>
               {open ? <span className="font-mono">{formatHbar(order.budget)}</span> : "unused part refunded"}
             </Row>
+            {open &&
+              order.display !== "budget-empty" &&
+              sweep.status === SweepStatus.Scheduled &&
+              sweep.nextSweepAt && (
+                <Row label="Next market check">
+                  <span data-testid="next-check">
+                    {sweep.nextSweepAt > Date.now() / 1000
+                      ? `in ${durationText(sweep.nextSweepAt - Date.now() / 1000)}`
+                      : "due now"}
+                  </span>
+                </Row>
+              )}
             <Row label="Expires">{new Date(order.expiry * 1000).toLocaleString("en-GB", DATE_FORMAT)}</Row>
             {holder && (
               <Row label="Holder">

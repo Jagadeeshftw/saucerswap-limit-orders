@@ -8,9 +8,9 @@ import heldOrderLogs from "../../utils/orders/__fixtures__/order-2-logs.json";
 
 export const ACCOUNT = "0x70997970c51812dc3a010c7d01b50e0d17dc79c8" as const;
 export const ACCOUNT_ID = "0.0.4101";
-export const VAULT_ID = "0.0.10779995";
-export const COLLECTION = "0x0000000000000000000000000000000000a47d5c" as const;
-export const COLLECTION_ID = "0.0.10779996";
+export const VAULT_ID = "0.0.10787941";
+export const COLLECTION = "0x0000000000000000000000000000000000a49c67" as const;
+export const COLLECTION_ID = "0.0.10787943";
 export const WHBAR = "0x0000000000000000000000000000000000003ad2" as const;
 export const USDC = "0x0000000000000000000000000000000000001549" as const;
 export const DAI = "0x0000000000000000000000000000000000001599" as const;
@@ -53,6 +53,8 @@ export type Scenario = {
   associations: string[];
   guards: Record<number, GuardReading>;
   fundedOrders: Record<number, number>;
+  /** Markets whose sweep chain has stopped although orders are funded. */
+  stalled: number[];
   orders: Record<string, ScenarioOrder>;
   held: number[];
   /** NFT holder per order id, where it is not the connected account. */
@@ -94,6 +96,7 @@ export const baseScenario = (): Scenario => ({
     2: guardOpen(99_980_000n),
   },
   fundedOrders: { 1: 1, 2: 0 },
+  stalled: [],
   orders: {},
   held: [],
   holders: {},

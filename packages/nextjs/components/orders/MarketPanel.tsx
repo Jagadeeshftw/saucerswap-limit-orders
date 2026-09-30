@@ -1,7 +1,10 @@
 "use client";
 
 import { GuardBanner } from "~~/components/orders/StatusBits";
+import { SweepStatusBanner } from "~~/components/orders/SweepStatusBanner";
 import { type GuardInfo, type MarketInfo, useContractEntityId } from "~~/hooks/orders/useMarkets";
+import { durationText } from "~~/utils/orders/budget";
+import { GuardState } from "~~/utils/orders/orders";
 import { formatBps, formatPrice } from "~~/utils/orders/units";
 
 export const ago = (unixSeconds: number, now = Date.now() / 1000) => {
@@ -46,7 +49,13 @@ export const MarketPanel = ({ market, guard }: { market: MarketInfo; guard: Guar
         <Stat
           label={`Chainlink ${market.base.symbol}/${market.quote.symbol}`}
           value={guard && guard.oraclePrice > 0n ? formatPrice(guard.oraclePrice) : "–"}
-          note={guard?.oracleUpdatedAt ? `older feed updated ${ago(guard.oracleUpdatedAt)}` : "loading"}
+          note={
+            !guard?.oracleUpdatedAt
+              ? "loading"
+              : guard.state === GuardState.OracleStale
+                ? `updated ${ago(guard.oracleUpdatedAt)}, max age ${durationText(market.maxOracleAge)}`
+                : `updated ${ago(guard.oracleUpdatedAt)}`
+          }
         />
         <Stat
           label={`Pool TWAP (${market.twapWindow / 60} min)`}
@@ -62,6 +71,7 @@ export const MarketPanel = ({ market, guard }: { market: MarketInfo; guard: Guar
         </div>
       </div>
       {guard && <GuardBanner state={guard.state} />}
+      <SweepStatusBanner marketId={market.id} />
       <div className="hidden gap-3 md:grid">
         <h2 className="m-0 text-xs font-semibold tracking-wide text-base-content/70 uppercase">How an order runs</h2>
         {[
@@ -71,7 +81,7 @@ export const MarketPanel = ({ market, guard }: { market: MarketInfo; guard: Guar
           ],
           [
             "Scheduled checks",
-            `The vault uses the Hedera Schedule Service to check this market every ${market.sweepInterval / 60} min. No bot is involved.`,
+            `The vault uses the Hedera Schedule Service to check this market. Each check waits about as long as the price needs to reach the nearest trigger (at up to ${formatBps(market.maxMoveBpsPerHour)} an hour), between ${durationText(market.minInterval)} and ${durationText(market.maxInterval)}. No bot is involved.`,
           ],
           [
             "Fill or refund",

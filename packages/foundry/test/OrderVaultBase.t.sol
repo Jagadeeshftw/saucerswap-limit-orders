@@ -6,7 +6,7 @@ import { OrderVault } from "../contracts/OrderVault.sol";
 import { PriceMath } from "../contracts/libraries/PriceMath.sol";
 import { ISaucerSwapV2Router, ISaucerSwapV2Pool } from "../contracts/interfaces/ISaucerSwapV2.sol";
 import { IAggregatorV3 } from "../contracts/interfaces/IAggregatorV3.sol";
-import { Market, PlaceParams, Side, Trigger } from "../contracts/types/OrderTypes.sol";
+import { Costs, Market, PlaceParams, Side, Trigger } from "../contracts/types/OrderTypes.sol";
 import { MarketConfig } from "../script/MarketConfig.sol";
 import { MockExchangeRate, MockHss, MockHts, MockNftCollection } from "./mocks/MockHederaSystem.sol";
 import { MockAggregator, MockPool, MockRouter, MockToken } from "./mocks/MockMarket.sol";
@@ -159,12 +159,34 @@ abstract contract OrderVaultBase is Test {
         );
     }
 
-    /// @dev Run the pending scheduled sweep the way HSS does: at its expiry, called by the vault itself.
-    function _runScheduledSweep(uint256 marketId) internal {
-        (, uint40 nextSweepAt,,) = vault.sweeps(marketId);
-        vm.warp(nextSweepAt);
+    /// @dev Run the latest schedule the way HSS does: at its expiry, from the vault, with its own gas limit and calldata.
+    function _runScheduledSweep(uint256) internal {
+        MockHss.Scheduled memory job = hss.last();
+        vm.warp(job.expiry);
         vm.prank(address(vault));
-        vault.sweep(marketId);
+        (bool ok, bytes memory ret) = address(vault).call{ gas: job.gasLimit }(job.callData);
+        if (!ok) {
+            assembly ("memory-safe") {
+                revert(add(ret, 32), mload(ret))
+            }
+        }
+    }
+
+    /// @dev Tinybar the vault charges for `gas`: the configured USD gas price plus margin, at the mock's testnet rate.
+    function _tinybar(uint256 gas) internal pure returns (uint256) {
+        Costs memory c = MarketConfig.costs();
+        uint256 tinycents = gas * c.gasPriceTinycents;
+        tinycents += tinycents * c.safetyBps / 10_000;
+        return tinycents * (1e12 * uint256(30_000) / 231_199) / 1e12;
+    }
+
+    function _idleSweep() internal pure returns (uint256) {
+        return _tinybar(MarketConfig.costs().idleSweepGas);
+    }
+
+    /// @dev The epoch the market's pending schedule was created under.
+    function _epoch(uint256 marketId) internal view returns (uint32 epoch) {
+        (,,,, epoch,) = vault.sweeps(marketId);
     }
 
     /// @dev Move HBAR's Chainlink price and the pool tick together so the guard stays open.

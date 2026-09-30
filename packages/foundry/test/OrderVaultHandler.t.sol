@@ -20,14 +20,14 @@ contract OrderVaultHandlerTest is OrderVaultBase {
 
     function test_handler_canFill() public {
         handler.place(0, false, false, true, 100e8, 0, 0); // sell HBAR at or above 97% of spot
-        handler.scheduledSweep(false);
+        handler.scheduledSweep();
         assertEq(uint8(vault.getOrder(handler.orderIds(0)).status), uint8(Status.Filled));
     }
 
     function test_handler_canExpire() public {
         handler.place(0, false, true, false, 0, 0, 0); // buy HBAR at or below 97% of spot, 1 hour expiry
-        handler.warp(2 hours);
-        handler.manualExecute(0, 1);
+        handler.warp(2 hours); // HSS runs the sweep the vault scheduled for the order's expiry
         assertEq(uint8(vault.getOrder(handler.orderIds(0)).status), uint8(Status.Expired));
+        assertEq(handler.failedJobs(), 0);
     }
 }

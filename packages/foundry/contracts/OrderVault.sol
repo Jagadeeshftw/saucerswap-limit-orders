@@ -12,6 +12,7 @@ import { IExchangeRate } from "./interfaces/IExchangeRate.sol";
 import { ISaucerSwapV2Router } from "./interfaces/ISaucerSwapV2.sol";
 import { PriceMath } from "./libraries/PriceMath.sol";
 import { MarketGuard } from "./libraries/MarketGuard.sol";
+import { OrderCollection } from "./libraries/OrderCollection.sol";
 import {
     Costs,
     GuardParams,
@@ -24,6 +25,7 @@ import {
     Status,
     SweepParams,
     SweepState,
+    SweepStatus,
     Trigger
 } from "./types/OrderTypes.sol";
 
@@ -31,8 +33,9 @@ import {
 /// @notice Limit and stop orders that execute on SaucerSwap V2 with no off-chain keeper.
 /// @dev Each order is an HTS NFT minted by this vault; whoever holds it owns the order.
 ///      Each market runs one self-rescheduling sweep through the Hedera Schedule Service,
-///      and the sweep's cost is split across the orders it checks. A fill needs the pool's
-///      TWAP to agree with Chainlink, so a manipulated or stale market cannot drain an order.
+///      and the sweep's cost is split across the orders it checks. Scheduling a call is a fixed
+///      network fee, so the next sweep waits as long as the nearest trigger allows. A fill needs the
+///      pool's TWAP to agree with Chainlink, so a manipulated or stale market cannot drain an order.
 contract OrderVault is Ownable2Step, ReentrancyGuard {
     using SafeCast for uint256;
 
@@ -54,24 +57,37 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
 
     int64 internal constant HTS_SUCCESS = 22;
     int64 internal constant HTS_ALREADY_ASSOCIATED = 194;
-    uint256 internal constant NFT_KEYS_SUPPLY_AND_WIPE = 16 | 8;
-    int64 internal constant NFT_AUTO_RENEW_PERIOD = 7_776_000;
 
     /// @dev HIP-1215 caps expiry 62 days ahead; the minimum is a few seconds past consensus time.
     uint256 internal constant MIN_SWEEP_INTERVAL = 30;
     uint256 internal constant MAX_SWEEP_INTERVAL = 1 days;
+    uint256 internal constant MAX_HELD_STREAK = 8;
     uint256 internal constant CAPACITY_PROBES = 6;
     /// @dev A sweep that has not fired this long after its expiry is treated as dead and may be restarted.
     uint256 internal constant SWEEP_GRACE = 120;
     uint256 internal constant MAX_ORDER_LIFETIME = 90 days;
     uint256 internal constant MIN_CHECKS_FUNDED = 6;
-    uint256 internal constant MAX_GUARD_DEVIATION_BPS = 1_000;
-    uint256 internal constant MAX_SLIPPAGE_BPS = 1_000;
     uint256 internal constant PAYOUT_GAS = 30_000;
     uint256 internal constant SWAP_DEADLINE = 300;
+    /// @dev Tinycents converted per exchange-rate lookup; every fee in one call is priced from a single lookup.
+    uint256 internal constant RATE_UNIT = 1e12;
 
     ISaucerSwapV2Router public immutable ROUTER;
     address public immutable WHBAR;
+
+    /// @dev Working state of one sweep: its prices and charges, and what it found.
+    struct Pass {
+        bool scheduled;
+        bool held;
+        GuardReading guard;
+        uint256 rate;
+        uint256 share;
+        uint256 parkFee;
+        uint256 reserveGas;
+        uint256 next;
+        uint256 checked;
+        uint256 filled;
+    }
 
     // ---------------------------------------------------------------------------------------
     // Storage
@@ -133,7 +149,10 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
     event FillFailed(uint256 indexed orderId, bytes reason);
     event BudgetExhausted(uint256 indexed orderId, uint256 budgetLeft);
     event BudgetToppedUp(uint256 indexed orderId, address indexed from, uint256 amount, uint256 budget);
-    event SweepScheduled(uint256 indexed marketId, address schedule, uint256 executeAt);
+    event SweepScheduled(uint256 indexed marketId, address schedule, uint256 executeAt, uint256 epoch);
+    event SweepSuperseded(uint256 indexed marketId, uint256 epoch);
+    /// @notice An order needed a check sooner than the pending sweep and paid for the superseded run.
+    event SweepBroughtForward(uint256 indexed orderId, uint256 charged, uint256 budgetLeft);
     event SweepScheduleFailed(uint256 indexed marketId, int64 responseCode);
     event SweepExecuted(
         uint256 indexed marketId, bool scheduled, GuardState guard, uint256 checked, uint256 filled, uint256 openOrders
@@ -187,31 +206,7 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
     /// @dev Send the HTS creation fee as value (about 15 HBAR on testnet); any excess stays as surplus.
     function initialize(string calldata name, string calldata symbol) external payable onlyOwner {
         if (collection != address(0)) revert AlreadyInitialized();
-        IHederaTokenService.TokenKey[] memory keys = new IHederaTokenService.TokenKey[](1);
-        keys[0] = IHederaTokenService.TokenKey({
-            keyType: NFT_KEYS_SUPPLY_AND_WIPE,
-            key: IHederaTokenService.KeyValue({
-                inheritAccountKey: false,
-                contractId: address(this),
-                ed25519: "",
-                ECDSA_secp256k1: "",
-                delegatableContractId: address(0)
-            })
-        });
-        IHederaTokenService.HederaToken memory token = IHederaTokenService.HederaToken({
-            name: name,
-            symbol: symbol,
-            treasury: address(this),
-            memo: "SaucerSwap limit and stop orders",
-            tokenSupplyType: false,
-            maxSupply: 0,
-            freezeDefault: false,
-            tokenKeys: keys,
-            expiry: IHederaTokenService.Expiry({
-                second: 0, autoRenewAccount: address(this), autoRenewPeriod: NFT_AUTO_RENEW_PERIOD
-            })
-        });
-        (int64 rc, address created) = HTS.createNonFungibleToken{ value: msg.value }(token);
+        (int64 rc, address created) = OrderCollection.create(name, symbol, msg.value);
         if (rc != HTS_SUCCESS) revert HtsError(HtsOperation.CreateCollection, rc);
         collection = created;
         emit CollectionCreated(created);
@@ -297,7 +292,8 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
             if (msg.value < p.amountIn) revert WrongValue(msg.value, p.amountIn);
             budget = msg.value - p.amountIn;
         }
-        uint256 required = minBudget(p.marketId, p.side);
+        uint256 rate = _rate();
+        uint256 required = _minBudget(m, p.side, rate);
         if (budget < required) revert InsufficientBudget(budget, required);
 
         if (tokenIn != HBAR) _pullToken(tokenIn, msg.sender, p.amountIn);
@@ -335,8 +331,7 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
             budget
         );
 
-        SweepState storage s = sweeps[p.marketId];
-        if (_sweepIsDead(s)) _scheduleSweep(p.marketId, m, s);
+        _ensureSweep(orderId, _orders[orderId], m, rate);
     }
 
     /// @notice Cancel an open order; escrow and unused budget go back to the NFT holder.
@@ -354,13 +349,13 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
         Order storage o = _openOrder(orderId);
         o.budget += msg.value.toUint128();
         totalBudgets += msg.value;
-        if (!o.funded && o.budget >= _reserve(o) + checkCost(o.marketId)) {
+        uint256 rate = _rate();
+        if (!o.funded && o.budget >= _reserve(o, rate) + _sweepShare(1, rate)) {
             o.funded = true;
             sweeps[o.marketId].fundedOrders++;
         }
         emit BudgetToppedUp(orderId, msg.sender, msg.value, o.budget);
-        SweepState storage s = sweeps[o.marketId];
-        if (o.funded && _sweepIsDead(s)) _scheduleSweep(o.marketId, _markets[o.marketId], s);
+        if (o.funded) _ensureSweep(orderId, o, _markets[o.marketId], rate);
     }
 
     /// @notice Check one order now and fill or expire it if due. The caller pays gas; the budget is untouched.
@@ -400,58 +395,91 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
 
     /// @notice Check up to `maxOrders` open orders of a market, fill the ones whose trigger is met,
     ///         and, when called by the Hedera Schedule Service, schedule the next sweep.
-    /// @dev Scheduled calls arrive with msg.sender == this vault. They debit each checked order's
-    ///      budget because the vault pays their fees. Manual calls are paid by the caller and debit nothing.
-    function sweep(uint256 marketId) external nonReentrant {
+    /// @dev Scheduled calls arrive with msg.sender == this vault and carry the epoch they were scheduled
+    ///      under; a stale epoch means an earlier sweep replaced this one, so it returns at once. Scheduled
+    ///      calls debit each checked order's budget because the vault pays their fees. Manual calls are
+    ///      paid by the caller, debit nothing and ignore `epoch`.
+    function sweep(uint256 marketId, uint32 epoch) external nonReentrant {
         Market storage m = _market(marketId);
         SweepState storage s = sweeps[marketId];
         bool scheduled = msg.sender == address(this);
-        if (scheduled) s.pendingSchedule = address(0);
+        if (scheduled) {
+            if (epoch != s.epoch) {
+                emit SweepSuperseded(marketId, epoch);
+                return;
+            }
+            s.pendingSchedule = address(0);
+        }
 
-        GuardReading memory g = guardReading(marketId);
+        Pass memory pass;
+        pass.scheduled = scheduled;
+        pass.guard = guardReading(marketId);
+        pass.rate = _rate();
         uint256[] memory batch = _nextBatch(marketId, m.sweep.maxOrders);
-        uint256 share = scheduled ? _batchShare(batch) : 0;
-        uint256 reserveGas = _finishGas();
-        uint256 checked;
-        uint256 filled;
+        if (scheduled) (pass.share, pass.parkFee) = _batchCharges(batch, pass.rate);
+        pass.reserveGas = _finishGas();
+        pass.next = m.sweep.maxInterval;
 
         for (uint256 i; i < batch.length; ++i) {
-            if (gasleft() < reserveGas + costs.checkGas + costs.settleGas) break;
-            uint256 orderId = batch[i];
-            Order storage o = _orders[orderId];
-            if (o.status != Status.Open) continue;
-            if (block.timestamp >= o.expiry) {
-                if (scheduled) _debit(o, _gasToTinybar(costs.settleGas));
-                _expire(orderId, o);
-                continue;
+            if (gasleft() < pass.reserveGas + costs.checkGas + costs.settleGas) {
+                pass.next = m.sweep.minInterval;
+                break;
             }
-            if (!o.funded) continue;
-            if (scheduled && !_charge(orderId, o, share)) continue;
-            checked++;
-            if (g.oraclePrice == 0 || !_triggerMet(o, g.oraclePrice)) continue;
-            if (g.state != GuardState.Open) {
-                emit FillHeld(orderId, g.state, g.oraclePrice, g.poolPrice);
-                continue;
-            }
-            if (filled >= m.sweep.maxFills || gasleft() < reserveGas + _fillGas(m, o.side)) continue;
-            if (scheduled) _debit(o, fillCost(o.marketId, o.side));
-            if (_tryFill(orderId, g, gasleft() - reserveGas)) filled++;
+            _visit(batch[i], m, pass);
         }
 
         uint256 open = _openOrders[marketId].length;
         s.cursor = open == 0 ? 0 : ((s.cursor + batch.length) % open).toUint32();
-        emit SweepExecuted(marketId, scheduled, g.state, checked, filled, open);
+        if (open > batch.length) pass.next = m.sweep.minInterval;
+        uint256 next = _backOff(m, s, pass.held, pass.next);
+        emit SweepExecuted(marketId, scheduled, pass.guard.state, pass.checked, pass.filled, open);
 
-        if (s.fundedOrders > 0 && (scheduled || _sweepIsDead(s))) _scheduleSweep(marketId, m, s);
+        if (s.fundedOrders > 0 && (scheduled || _sweepIsDead(s))) _scheduleSweep(marketId, s, next);
     }
 
-    /// @notice Restart a market's sweep chain if it stopped, e.g. because a schedule was saturated.
+    /// @notice Restart a market's sweep chain if it stopped, e.g. because the vault could not pay a schedule.
+    ///         Anyone may call it; the caller pays for scheduling the next sweep.
     function restartSweep(uint256 marketId) external nonReentrant {
         Market storage m = _market(marketId);
         SweepState storage s = sweeps[marketId];
         if (s.fundedOrders == 0) revert NoFundedOrders(marketId);
         if (!_sweepIsDead(s)) revert SweepAlive(marketId, s.nextSweepAt);
-        _scheduleSweep(marketId, m, s);
+        _scheduleSweep(marketId, s, m.sweep.minInterval);
+    }
+
+    /// @dev One order in a sweep: expire it, charge it (scheduled sweeps only), then fill it if its trigger is met
+    ///      and the guard is open. Updates the pass's next wait: sooner for nearer triggers, back-off for holds.
+    ///      Batches come from the open list, and only the current order settles in an iteration.
+    function _visit(uint256 orderId, Market storage m, Pass memory pass) internal {
+        Order storage o = _orders[orderId];
+        if (block.timestamp >= o.expiry) {
+            if (pass.scheduled) _debit(o, _gasToTinybar(costs.settleGas, pass.rate));
+            _expire(orderId, o);
+            return;
+        }
+        if (!o.funded) return;
+        if (pass.scheduled && !_charge(orderId, o, pass.share, pass.parkFee, pass.rate)) return;
+        pass.checked++;
+        GuardReading memory g = pass.guard;
+        uint256 distance = g.oraclePrice == 0 ? 0 : _distance(o.trigger, o.triggerPrice, g.oraclePrice);
+        if (distance > 0) {
+            uint256 wait = _delayFor(m, distance, o.expiry);
+            if (wait < pass.next) pass.next = wait;
+            return;
+        }
+        if (g.state != GuardState.Open) {
+            pass.held = true;
+            emit FillHeld(orderId, g.state, g.oraclePrice, g.poolPrice);
+            return;
+        }
+        uint256 fillGas = _fillGas(m, o.side);
+        if (pass.filled >= m.sweep.maxFills || gasleft() < pass.reserveGas + fillGas) {
+            pass.next = m.sweep.minInterval;
+            return;
+        }
+        if (pass.scheduled) _debit(o, _gasToTinybar(fillGas, pass.rate));
+        if (_tryFill(orderId, g, gasleft() - pass.reserveGas)) pass.filled++;
+        else pass.held = true;
     }
 
     /// @notice Settle a fill. Only callable by the vault itself, so a failed swap can be caught.
@@ -483,10 +511,6 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
         return _market(marketId);
     }
 
-    function getCosts() external view returns (Costs memory) {
-        return costs;
-    }
-
     function getOrder(uint256 orderId) external view returns (Order memory) {
         return _orders[orderId];
     }
@@ -505,37 +529,62 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
         return MarketGuard.read(_market(marketId));
     }
 
-    /// @notice Output an order would get at `price`, before slippage.
-    function valueAt(uint256 marketId, Side side, uint256 amountIn, uint256 price) external view returns (uint256) {
-        return _valueAt(_market(marketId), side, amountIn, price);
-    }
-
     /// @notice HBAR (tinybar) charged to an order per scheduled check if it were the only funded order.
     function checkCost(uint256 marketId) public view returns (uint256) {
         _market(marketId);
-        return _sweepShare(1);
+        return _sweepShare(1, _rate());
     }
 
     /// @notice HBAR (tinybar) charged per check when `fundedOrders` orders share the sweep.
     function checkCostShared(uint256 fundedOrders) external view returns (uint256) {
-        return _sweepShare(fundedOrders == 0 ? 1 : fundedOrders);
+        return _sweepShare(fundedOrders == 0 ? 1 : fundedOrders, _rate());
     }
 
-    /// @notice HBAR (tinybar) held back from checks so a fill can always be paid for.
+    /// @notice HBAR (tinybar) an order always keeps back: its fill, plus its part of a final sweep.
     function fillCost(uint256 marketId, Side side) public view returns (uint256) {
-        return _gasToTinybar(_fillGas(_market(marketId), side));
+        Market storage m = _market(marketId);
+        return _gasToTinybar(_fillGas(m, side) + _tailGas(), _rate());
     }
 
-    /// @notice Smallest budget accepted at placement: a fill plus `MIN_CHECKS_FUNDED` solo checks.
+    /// @notice Smallest budget accepted at placement: the reserve plus `MIN_CHECKS_FUNDED` solo checks.
     function minBudget(uint256 marketId, Side side) public view returns (uint256) {
-        return fillCost(marketId, side) + MIN_CHECKS_FUNDED * checkCost(marketId);
+        return _minBudget(_market(marketId), side, _rate());
     }
 
-    /// @notice Gas limit given to each scheduled sweep.
+    /// @notice Seconds until an order at `triggerPrice` would next be checked, at today's Chainlink price.
+    /// @dev The same rule a sweep applies; the frontend uses it to size budgets. Held or triggered orders
+    ///      get `minInterval`, and the wait shrinks as the price approaches the trigger.
+    function nextCheckDelay(uint256 marketId, Trigger trigger, uint256 triggerPrice, uint256 expiry)
+        external
+        view
+        returns (uint256)
+    {
+        Market storage m = _market(marketId);
+        GuardReading memory g = guardReading(marketId);
+        if (g.oraclePrice == 0) return m.sweep.minInterval;
+        return _delayFor(m, _distance(trigger, triggerPrice, g.oraclePrice), expiry);
+    }
+
+    /// @notice Whether a market's checks are running. `Stalled` means funded orders are waiting but no
+    ///         schedule will fire (the vault could not pay one, or it was missed); anyone may `restartSweep`.
+    function sweepStatus(uint256 marketId) external view returns (SweepStatus status, uint256 nextSweepAt) {
+        _market(marketId);
+        SweepState storage s = sweeps[marketId];
+        if (s.fundedOrders == 0) return (SweepStatus.Idle, 0);
+        if (_sweepIsDead(s)) return (SweepStatus.Stalled, s.nextSweepAt);
+        return (SweepStatus.Scheduled, s.nextSweepAt);
+    }
+
+    /// @notice Gas limit given to the next scheduled sweep: enough for the orders it will check today.
+    /// @dev Hedera bills gas used, but the payer must hold gasLimit x price up front, so keep it tight.
     function sweepGasLimit(uint256 marketId) public view returns (uint256) {
         Market storage m = _market(marketId);
-        return _finishGas() + uint256(m.sweep.maxOrders) * (uint256(costs.checkGas) + costs.settleGas)
-            + uint256(m.sweep.maxFills) * (uint256(costs.fillGasTokenIn) + costs.settleGas);
+        uint256 orders = _openOrders[marketId].length;
+        if (orders > m.sweep.maxOrders) orders = m.sweep.maxOrders;
+        if (orders == 0) orders = 1;
+        uint256 fills = orders < m.sweep.maxFills ? orders : m.sweep.maxFills;
+        return _finishGas() + orders * (uint256(costs.checkGas) + costs.settleGas) + fills
+            * (uint256(costs.fillGasTokenIn) + costs.settleGas);
     }
 
     /// @notice HBAR the vault holds beyond what it owes: escrow, budgets and credits.
@@ -582,7 +631,12 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
         returns (uint256 budgetRefund)
     {
         o.status = status;
-        if (o.funded) sweeps[o.marketId].fundedOrders--;
+        if (o.funded) {
+            SweepState storage s = sweeps[o.marketId];
+            // The last funded order leaving while a sweep is pending pays for that sweep's empty run.
+            if (s.fundedOrders == 1 && !_sweepIsDead(s)) _debit(o, _gasToTinybar(costs.idleSweepGas, _rate()));
+            s.fundedOrders--;
+        }
         o.funded = false;
         budgetRefund = o.budget;
         o.budget = 0;
@@ -592,10 +646,14 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
         _pay(holder, HBAR, budgetRefund);
     }
 
-    /// @dev Debit a scheduled check. Returns false (and parks the order) when the budget would dip into the fill reserve.
-    function _charge(uint256 orderId, Order storage o, uint256 share) internal returns (bool) {
-        uint256 reserve = _reserve(o);
-        if (o.budget < reserve + share) {
+    /// @dev Debit a scheduled check. When the budget would dip into the reserve, the order pays `parkFee`
+    ///      (its part of this sweep, taken from the reserve) and is parked instead.
+    function _charge(uint256 orderId, Order storage o, uint256 share, uint256 parkFee, uint256 rate)
+        internal
+        returns (bool)
+    {
+        if (o.budget < _reserve(o, rate) + share) {
+            _debit(o, parkFee);
             o.funded = false;
             sweeps[o.marketId].fundedOrders--;
             emit BudgetExhausted(orderId, o.budget);
@@ -614,12 +672,19 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
         totalBudgets -= taken;
     }
 
-    function _reserve(Order storage o) internal view returns (uint256) {
-        return fillCost(o.marketId, o.side);
+    /// @dev Budget an order never spends on routine checks: its fill, plus its share of a final sweep.
+    function _reserve(Order storage o, uint256 rate) internal view returns (uint256) {
+        return _gasToTinybar(_fillGas(_markets[o.marketId], o.side) + _tailGas(), rate);
     }
 
     function _triggerMet(Order storage o, uint256 price) internal view returns (bool) {
-        return o.trigger == Trigger.AtOrAbove ? price >= o.triggerPrice : price <= o.triggerPrice;
+        return _distance(o.trigger, o.triggerPrice, price) == 0;
+    }
+
+    /// @dev How far `price` still has to move to meet the trigger, in bps of `price`; 0 once it is met.
+    function _distance(Trigger trigger, uint256 triggerPrice, uint256 price) internal pure returns (uint256) {
+        if (trigger == Trigger.AtOrAbove ? price >= triggerPrice : price <= triggerPrice) return 0;
+        return PriceMath.deviationBps(triggerPrice, price);
     }
 
     function _openOrder(uint256 orderId) internal view returns (Order storage o) {
@@ -652,20 +717,64 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
     // Internal: scheduling and costs
     // ---------------------------------------------------------------------------------------
 
-    function _scheduleSweep(uint256 marketId, Market storage m, SweepState storage s) internal {
+    /// @dev Schedule the next sweep `delay` seconds out under a new epoch. The epoch only advances once
+    ///      HSS accepts the schedule, so a failed attempt leaves any pending sweep valid.
+    function _scheduleSweep(uint256 marketId, SweepState storage s, uint256 delay) internal {
         uint256 gasLimit = sweepGasLimit(marketId);
-        uint256 target = block.timestamp + m.sweep.interval;
-        uint256 at = _findCapacity(target, gasLimit);
+        uint256 at = _findCapacity(block.timestamp + delay, gasLimit);
+        uint32 epoch = s.epoch + 1;
         (int64 rc, address schedule) =
-            HSS.scheduleCall(address(this), at, gasLimit, 0, abi.encodeCall(this.sweep, (marketId)));
+            HSS.scheduleCall(address(this), at, gasLimit, 0, abi.encodeCall(this.sweep, (marketId, epoch)));
         if (rc != HTS_SUCCESS || schedule == address(0)) {
-            s.pendingSchedule = address(0);
             emit SweepScheduleFailed(marketId, rc);
             return;
         }
+        s.epoch = epoch;
         s.pendingSchedule = schedule;
         s.nextSweepAt = at.toUint40();
-        emit SweepScheduled(marketId, schedule, at);
+        emit SweepScheduled(marketId, schedule, at, epoch);
+    }
+
+    /// @dev Make sure a sweep looks at `o` in time: start the chain if it is dead, or bring it forward when
+    ///      this order needs a check well before the pending one. The superseded sweep still fires and
+    ///      returns at once; this order pays for that empty run. The caller pays the scheduling gas.
+    function _ensureSweep(uint256 orderId, Order storage o, Market storage m, uint256 rate) internal {
+        SweepState storage s = sweeps[o.marketId];
+        GuardReading memory g = guardReading(o.marketId);
+        uint256 delay = g.oraclePrice == 0
+            ? m.sweep.minInterval
+            : _delayFor(m, _distance(o.trigger, o.triggerPrice, g.oraclePrice), o.expiry);
+        bool dead = _sweepIsDead(s);
+        if (!dead) {
+            if (block.timestamp + delay + m.sweep.minInterval >= s.nextSweepAt) return;
+            uint256 fee = _gasToTinybar(costs.idleSweepGas, rate);
+            _debit(o, fee);
+            emit SweepBroughtForward(orderId, fee, o.budget);
+        }
+        _scheduleSweep(o.marketId, s, delay);
+    }
+
+    /// @dev Wait until the price could plausibly have covered `distanceBps`, within the market's bounds and
+    ///      never past the order's expiry (so expired orders are refunded promptly).
+    function _delayFor(Market storage m, uint256 distanceBps, uint256 expiry) internal view returns (uint256 d) {
+        d = (distanceBps * 1 hours) / m.sweep.maxMoveBpsPerHour;
+        if (d > m.sweep.maxInterval) d = m.sweep.maxInterval;
+        uint256 untilExpiry = expiry > block.timestamp ? expiry - block.timestamp : 0;
+        if (d > untilExpiry) d = untilExpiry;
+        if (d < m.sweep.minInterval) d = m.sweep.minInterval;
+    }
+
+    /// @dev A triggered order that could not fill (guard closed, or the swap failed) is retried after
+    ///      minInterval x 2^streak, so a long guard closure doesn't burn budgets every few minutes.
+    function _backOff(Market storage m, SweepState storage s, bool held, uint256 next) internal returns (uint256) {
+        if (!held) {
+            s.heldStreak = 0;
+            return next;
+        }
+        if (s.heldStreak < MAX_HELD_STREAK) s.heldStreak++;
+        uint256 wait = uint256(m.sweep.minInterval) << s.heldStreak;
+        if (wait > m.sweep.maxInterval) wait = m.sweep.maxInterval;
+        return wait < next ? wait : next;
     }
 
     /// @dev HIP-1215's suggested probe: exponential back-off with PRNG jitter so vaults don't stampede one second.
@@ -684,34 +793,50 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
         return s.pendingSchedule == address(0) || block.timestamp > uint256(s.nextSweepAt) + SWEEP_GRACE;
     }
 
-    /// @dev Charge per order for this scheduled sweep. The fixed cost is split over the batch's orders that
-    ///      can actually pay; recounting until stable means every counted order covers its share.
-    function _batchShare(uint256[] memory batch) internal view returns (uint256 share) {
-        uint256 payers;
+    /// @dev Charges for this scheduled sweep. `share` is each paying order's part: the fixed cost split over
+    ///      the batch's orders that can afford it (recounted until stable) plus its own check. Orders that
+    ///      can't afford it pay `parkFee` from their reserve: their own check, and when nobody can pay, an
+    ///      even part of this final sweep too.
+    function _batchCharges(uint256[] memory batch, uint256 rate)
+        internal
+        view
+        returns (uint256 share, uint256 parkFee)
+    {
+        uint256 funded;
         for (uint256 i; i < batch.length; ++i) {
-            Order storage o = _orders[batch[i]];
-            if (o.status == Status.Open && o.funded && block.timestamp < o.expiry) payers++;
+            if (_live(_orders[batch[i]])) funded++;
         }
+        uint256 payers = funded;
         while (payers > 0) {
-            share = _sweepShare(payers);
+            share = _sweepShare(payers, rate);
             uint256 affordable;
             for (uint256 i; i < batch.length; ++i) {
                 Order storage o = _orders[batch[i]];
-                if (o.status != Status.Open || !o.funded || block.timestamp >= o.expiry) continue;
-                if (o.budget >= _reserve(o) + share) affordable++;
+                if (_live(o) && o.budget >= _reserve(o, rate) + share) affordable++;
             }
-            if (affordable == payers) return share;
+            if (affordable == payers) return (share, _gasToTinybar(costs.checkGas, rate));
             payers = affordable;
         }
-        // Nobody in the batch can pay even a shared check: price it solo so `_charge` parks them.
-        return _sweepShare(1);
+        // Nobody can pay: this is the chain's last sweep. Price checks solo so every order parks.
+        uint256 parkers = funded == 0 ? 1 : funded;
+        return (
+            _sweepShare(1, rate),
+            _gasToTinybar((uint256(costs.sweepBaseGas) + parkers - 1) / parkers + costs.checkGas, rate)
+        );
+    }
+
+    function _live(Order storage o) internal view returns (bool) {
+        return o.status == Status.Open && o.funded && block.timestamp < o.expiry;
     }
 
     /// @dev Per-order charge for one scheduled check: an even share of the sweep's fixed cost plus its own check.
-    function _sweepShare(uint256 fundedOrders) internal view returns (uint256) {
+    function _sweepShare(uint256 fundedOrders, uint256 rate) internal view returns (uint256) {
         uint256 fixedGas = uint256(costs.scheduleGas) + costs.sweepBaseGas;
-        uint256 gas = (fixedGas + fundedOrders - 1) / fundedOrders + costs.checkGas;
-        return _gasToTinybar(gas);
+        return _gasToTinybar((fixedGas + fundedOrders - 1) / fundedOrders + costs.checkGas, rate);
+    }
+
+    function _minBudget(Market storage m, Side side, uint256 rate) internal view returns (uint256) {
+        return _gasToTinybar(_fillGas(m, side) + _tailGas(), rate) + MIN_CHECKS_FUNDED * _sweepShare(1, rate);
     }
 
     /// @dev Gas a sweep keeps back so it can always reach the reschedule.
@@ -719,20 +844,27 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
         return uint256(costs.scheduleGas) + costs.sweepBaseGas;
     }
 
+    /// @dev The most one order can owe for the chain's final sweep: running it alone, with no reschedule.
+    function _tailGas() internal view returns (uint256) {
+        return uint256(costs.sweepBaseGas) + costs.checkGas;
+    }
+
     function _fillGas(Market storage m, Side side) internal view returns (uint256) {
         (address tokenIn,) = _route(m, side);
         return uint256(tokenIn == HBAR ? costs.fillGasHbarIn : costs.fillGasTokenIn) + costs.settleGas;
     }
 
-    function _gasToTinybar(uint256 gas) internal view returns (uint256) {
+    /// @dev Tinybar for `gas` at the configured gas price plus the safety margin, using a cached `rate`.
+    function _gasToTinybar(uint256 gas, uint256 rate) internal view returns (uint256) {
         uint256 tinycents = gas * costs.gasPriceTinycents;
-        return _tinycentsToTinybars(tinycents + (tinycents * costs.safetyBps) / PriceMath.BPS);
+        tinycents += (tinycents * costs.safetyBps) / PriceMath.BPS;
+        return (tinycents * rate) / RATE_UNIT;
     }
 
-    /// @dev Static call so views can price fees with the network's own exchange rate.
-    function _tinycentsToTinybars(uint256 tinycents) internal view returns (uint256) {
+    /// @dev Tinybar per RATE_UNIT tinycents from the 0x168 exchange-rate system contract. Read once per call.
+    function _rate() internal view returns (uint256) {
         (bool ok, bytes memory ret) =
-            EXCHANGE_RATE.staticcall(abi.encodeCall(IExchangeRate.tinycentsToTinybars, (tinycents)));
+            EXCHANGE_RATE.staticcall(abi.encodeCall(IExchangeRate.tinycentsToTinybars, (RATE_UNIT)));
         if (!ok || ret.length != 32) revert InvalidCosts();
         return abi.decode(ret, (uint256));
     }
@@ -875,13 +1007,12 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
     }
 
     function _validateGuard(GuardParams calldata g, uint24 poolFee) internal pure {
-        if (g.twapWindow == 0 || g.maxOracleAge == 0) revert InvalidGuard();
-        if (g.maxDeviationBps == 0 || g.maxDeviationBps > MAX_GUARD_DEVIATION_BPS) revert InvalidGuard();
-        if (g.maxSlippageBps <= poolFee / 100 || g.maxSlippageBps > MAX_SLIPPAGE_BPS) revert InvalidGuard();
+        if (!MarketGuard.paramsValid(g, poolFee)) revert InvalidGuard();
     }
 
     function _validateSweep(SweepParams calldata p) internal pure {
-        if (p.interval < MIN_SWEEP_INTERVAL || p.interval > MAX_SWEEP_INTERVAL) revert InvalidSweep();
+        if (p.minInterval < MIN_SWEEP_INTERVAL || p.maxInterval > MAX_SWEEP_INTERVAL) revert InvalidSweep();
+        if (p.minInterval > p.maxInterval || p.maxMoveBpsPerHour == 0) revert InvalidSweep();
         if (p.maxOrders == 0 || p.maxFills == 0 || p.maxFills > p.maxOrders) revert InvalidSweep();
     }
 

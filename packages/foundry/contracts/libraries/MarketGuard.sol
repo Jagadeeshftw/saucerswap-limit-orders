@@ -4,7 +4,7 @@ pragma solidity ^0.8.28;
 import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import { IAggregatorV3 } from "../interfaces/IAggregatorV3.sol";
 import { PriceMath } from "./PriceMath.sol";
-import { GuardReading, GuardState, Market } from "../types/OrderTypes.sol";
+import { GuardParams, GuardReading, GuardState, Market } from "../types/OrderTypes.sol";
 
 /// @title MarketGuard
 /// @notice Decides whether a market is safe to fill: both Chainlink feeds must be valid and fresh, and the
@@ -12,6 +12,24 @@ import { GuardReading, GuardState, Market } from "../types/OrderTypes.sol";
 /// @dev An external library so the check is linked rather than inlined, keeping OrderVault under 24 KiB.
 library MarketGuard {
     using SafeCast for int256;
+
+    /// @dev A shorter window is close to spot price; a longer one outruns SaucerSwap's observation history.
+    uint256 internal constant MIN_TWAP_WINDOW = 300;
+    uint256 internal constant MAX_TWAP_WINDOW = 1 days;
+    /// @dev Hedera's Chainlink feeds have a 24 h heartbeat; allow two hours of slack on top.
+    uint256 internal constant MIN_ORACLE_AGE = 60;
+    uint256 internal constant MAX_ORACLE_AGE = 26 hours;
+    uint256 internal constant MAX_DEVIATION_BPS = 1_000;
+    uint256 internal constant MAX_SLIPPAGE_BPS = 1_000;
+
+    /// @notice Whether guard parameters keep the guard meaningful. The owner can tune a market but can't
+    ///         switch its protection off: no near-spot TWAP, no unlimited oracle age, no unbounded deviation,
+    ///         and slippage must exceed the pool fee (or no order could ever fill) without exceeding 10%.
+    function paramsValid(GuardParams calldata g, uint24 poolFee) external pure returns (bool) {
+        return g.twapWindow >= MIN_TWAP_WINDOW && g.twapWindow <= MAX_TWAP_WINDOW && g.maxOracleAge >= MIN_ORACLE_AGE
+            && g.maxOracleAge <= MAX_ORACLE_AGE && g.maxDeviationBps > 0 && g.maxDeviationBps <= MAX_DEVIATION_BPS
+            && g.maxSlippageBps > poolFee / 100 && g.maxSlippageBps <= MAX_SLIPPAGE_BPS;
+    }
 
     function read(Market storage m) external view returns (GuardReading memory r) {
         (uint256 baseUsd, uint256 baseUpdated) = readFeed(m.baseFeed);

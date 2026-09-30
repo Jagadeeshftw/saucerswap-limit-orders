@@ -61,8 +61,12 @@ struct GuardParams {
     uint16 maxSlippageBps;
 }
 
+/// @notice How often a market's sweep runs. The next sweep waits roughly as long as the price would need to reach
+///         the nearest trigger at `maxMoveBpsPerHour`, clamped to [minInterval, maxInterval].
 struct SweepParams {
-    uint32 interval;
+    uint32 minInterval;
+    uint32 maxInterval;
+    uint16 maxMoveBpsPerHour;
     uint16 maxOrders;
     uint8 maxFills;
 }
@@ -72,6 +76,16 @@ struct SweepState {
     uint40 nextSweepAt;
     uint32 cursor;
     uint32 fundedOrders;
+    /// @dev Bumped on every new schedule; a scheduled sweep carrying an older epoch has been superseded.
+    uint32 epoch;
+    /// @dev Consecutive sweeps where a triggered order could not fill; drives the back-off.
+    uint8 heldStreak;
+}
+
+enum SweepStatus {
+    Idle,
+    Scheduled,
+    Stalled
 }
 
 /// @notice Gas used by each piece of work, measured on Hedera testnet, and the network gas price.
@@ -82,6 +96,8 @@ struct Costs {
     uint32 fillGasHbarIn;
     uint32 fillGasTokenIn;
     uint32 settleGas;
+    /// @dev A sweep that finds nothing to do: superseded by an earlier one, or left with no funded orders.
+    uint32 idleSweepGas;
     /// @dev Hedera prices gas in USD; converted to tinybar through the 0x168 exchange-rate contract.
     uint32 gasPriceTinycents;
     uint16 safetyBps;

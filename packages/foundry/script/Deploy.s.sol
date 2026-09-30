@@ -16,7 +16,7 @@ import { ISaucerSwapV2Router } from "../contracts/interfaces/ISaucerSwapV2.sol";
 contract DeployScript is ScaffoldETHDeploy {
     /// @dev Covers the HTS NFT collection fee (~15.3 HBAR on testnet); the excess stays as withdrawable surplus.
     uint256 internal constant COLLECTION_FEE = 20 ether;
-    uint256 internal constant INITIALIZE_GAS = 400_000;
+    uint256 internal constant INITIALIZE_GAS = 800_000;
     uint256 internal constant LIST_MARKET_GAS = 3_000_000;
     address internal constant HTS = address(0x167);
 

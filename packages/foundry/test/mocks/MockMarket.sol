@@ -10,6 +10,8 @@ import { ISaucerSwapV2Router } from "../../contracts/interfaces/ISaucerSwapV2.so
 contract MockToken is ERC20 {
     uint8 internal immutable _decimals;
     mapping(address account => bool) public blocked;
+    /// @notice When set, transferFrom and approve return false instead of reverting.
+    bool public refuses;
 
     constructor(string memory symbol, uint8 decimals_) ERC20(symbol, symbol) {
         _decimals = decimals_;
@@ -27,9 +29,23 @@ contract MockToken is ERC20 {
         blocked[account] = value;
     }
 
+    function setRefuses(bool value) external {
+        refuses = value;
+    }
+
     function transfer(address to, uint256 amount) public override returns (bool) {
         if (blocked[to]) return false;
         return super.transfer(to, amount);
+    }
+
+    function transferFrom(address from, address to, uint256 amount) public override returns (bool) {
+        if (refuses) return false;
+        return super.transferFrom(from, to, amount);
+    }
+
+    function approve(address spender, uint256 amount) public override returns (bool) {
+        if (refuses) return false;
+        return super.approve(spender, amount);
     }
 }
 

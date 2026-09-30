@@ -18,7 +18,10 @@ export type MarketInfo = {
   maxDeviationBps: number;
   maxOracleAge: number;
   twapWindow: number;
-  sweepInterval: number;
+  /** Checks run between these bounds; the wait is the time the price needs to reach the nearest trigger. */
+  minInterval: number;
+  maxInterval: number;
+  maxMoveBpsPerHour: number;
   active: boolean;
 };
 
@@ -88,7 +91,9 @@ export const useMarkets = () => {
           maxDeviationBps: r.guard.maxDeviationBps,
           maxOracleAge: r.guard.maxOracleAge,
           twapWindow: r.guard.twapWindow,
-          sweepInterval: r.sweep.interval,
+          minInterval: r.sweep.minInterval,
+          maxInterval: r.sweep.maxInterval,
+          maxMoveBpsPerHour: r.sweep.maxMoveBpsPerHour,
           active: r.active,
         },
       ];
@@ -155,6 +160,7 @@ export const useOrderCosts = (marketId: number | undefined, side: Side) => {
     query: { enabled, refetchInterval: REFRESH_MS },
   });
   const fundedOrders = data?.[3]?.status === "success" ? Number(data[3].result[3]) : 0;
+  // `fillCost` already includes the order's part of a final sweep, so it is the whole reserve.
   const { data: sharedCheck } = useReadContract({
     ...vault,
     functionName: "checkCostShared",
@@ -169,4 +175,47 @@ export const useOrderCosts = (marketId: number | undefined, side: Side) => {
     fundedOrders,
     sharedCheck: sharedCheck as bigint | undefined,
   };
+};
+
+export enum SweepStatus {
+  Idle,
+  Scheduled,
+  Stalled,
+}
+
+/** Whether the market's checks are running, and when the Schedule Service runs the next one. */
+export const useSweepStatus = (marketId: number | undefined) => {
+  const { data, refetch } = useReadContract({
+    ...vault,
+    functionName: "sweepStatus",
+    args: [BigInt(marketId ?? 0)],
+    query: { enabled: marketId !== undefined, refetchInterval: REFRESH_MS },
+  });
+  return {
+    status: data ? (Number(data[0]) as SweepStatus) : undefined,
+    nextSweepAt: data ? Number(data[1]) : undefined,
+    refetch,
+  };
+};
+
+/**
+ * Seconds until an order would next be checked at today's Chainlink price, for each candidate lifetime.
+ * The vault answers with the same rule its sweeps use, so the ticket can size a budget for the whole lifetime.
+ */
+export const useCheckDelays = (
+  marketId: number,
+  trigger: number,
+  triggerPrice: bigint | null,
+  lifetimes: readonly number[],
+) => {
+  const now = Math.floor(Date.now() / 60_000) * 60;
+  const { data } = useReadContracts({
+    contracts: lifetimes.map(seconds => ({
+      ...vault,
+      functionName: "nextCheckDelay" as const,
+      args: [BigInt(marketId), trigger, triggerPrice ?? 0n, BigInt(now + seconds)] as const,
+    })),
+    query: { enabled: Boolean(triggerPrice && triggerPrice > 0n), refetchInterval: REFRESH_MS },
+  });
+  return lifetimes.map((_, i) => (data?.[i]?.status === "success" ? Number(data[i].result as bigint) : undefined));
 };

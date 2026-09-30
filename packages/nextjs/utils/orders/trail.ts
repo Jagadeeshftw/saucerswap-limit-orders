@@ -32,6 +32,7 @@ const ORDER_EVENTS = new Set([
   "FillFailed",
   "BudgetExhausted",
   "BudgetToppedUp",
+  "SweepBroughtForward",
   "OrderFilled",
   "OrderCancelled",
   "OrderExpired",
@@ -173,6 +174,12 @@ const describe = (
         tone: "neutral",
         title: `Budget topped up by ${formatHbar(args.amount as bigint)}`,
         detail: `New budget ${formatHbar(args.budget as bigint)}.`,
+      };
+    case "SweepBroughtForward":
+      return {
+        tone: "neutral",
+        title: "Brought the market's next check forward",
+        detail: `This order needed a check sooner than the one already scheduled. It paid ${formatHbar(args.charged as bigint)} for the replaced run; ${formatHbar(args.budgetLeft as bigint)} left.`,
       };
     case "OrderFilled":
       return {

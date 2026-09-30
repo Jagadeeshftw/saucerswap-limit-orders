@@ -7,11 +7,12 @@ import { useQuery } from "@tanstack/react-query";
 import { erc20Abi, formatUnits, parseEventLogs } from "viem";
 import { usePublicClient } from "wagmi";
 import { TxStatus } from "~~/components/orders/TxStatus";
-import { type GuardInfo, type MarketInfo, legs, useOrderCosts } from "~~/hooks/orders/useMarkets";
+import { type GuardInfo, type MarketInfo, legs, useCheckDelays, useOrderCosts } from "~~/hooks/orders/useMarkets";
 import { useCollectionId } from "~~/hooks/orders/useOrders";
 import { vault } from "~~/hooks/orders/useVault";
 import { useVaultTx } from "~~/hooks/orders/useVaultTx";
 import { useWallet } from "~~/hooks/orders/useWallet";
+import { budgetFor, checksFor, coverageSeconds, durationText } from "~~/utils/orders/budget";
 import { type OrderKind, Side, Trigger, comparatorText, triggerFor } from "~~/utils/orders/orders";
 import {
   addressFromEntityId,
@@ -35,18 +36,7 @@ const EXPIRIES = [
   { label: "30 days", seconds: 30 * 86_400 },
 ];
 
-const COVERAGE = [
-  { label: "30 min", seconds: 1800 },
-  { label: "2 hours", seconds: 7200 },
-  { label: "1 day", seconds: 86_400 },
-];
-
-const durationText = (seconds: number) =>
-  seconds >= 86_400
-    ? `${Math.floor(seconds / 86_400)} d`
-    : seconds >= 3600
-      ? `${Math.floor(seconds / 3600)} h`
-      : `${Math.max(1, Math.floor(seconds / 60))} min`;
+const LIFETIMES = EXPIRIES.map(e => e.seconds);
 
 const Chip = ({
   on,
@@ -98,8 +88,7 @@ export const OrderTicket = ({ market, guard }: { market: MarketInfo; guard: Guar
   const [amountText, setAmountText] = useState("");
   const [triggerText, setTriggerText] = useState("");
   const [slippageText, setSlippageText] = useState("0.5");
-  const [expiry, setExpiry] = useState(EXPIRIES[2].seconds);
-  const [coverage, setCoverage] = useState(COVERAGE[0].seconds);
+  const [expiry, setExpiry] = useState(EXPIRIES[1].seconds);
   const [placedId, setPlacedId] = useState<bigint>();
 
   const { input, output } = legs(market, side);
@@ -134,12 +123,21 @@ export const OrderTicket = ({ market, guard }: { market: MarketInfo; guard: Guar
   const minSlippage = Math.floor(market.poolFee / 100) + 1;
   const slippageOk = slippageBps >= minSlippage && slippageBps <= market.maxSlippageBps;
 
-  const checks = Math.ceil(coverage / market.sweepInterval);
-  const budget = costs
-    ? [costs.fill + BigInt(checks) * costs.soloCheck, costs.minBudget].reduce((a, b) => (a > b ? a : b))
-    : undefined;
+  // The budget pays for every check the order needs until it expires, at the vault's own pace for this trigger.
+  const waits = useCheckDelays(market.id, trigger, triggerPrice, LIFETIMES);
+  const budgetForLifetime = (index: number) => {
+    const wait = waits[index];
+    if (!costs || wait === undefined) return undefined;
+    return budgetFor(checksFor(LIFETIMES[index], wait), costs.soloCheck, costs.fill, costs.minBudget);
+  };
+  const expiryIndex = LIFETIMES.indexOf(expiry);
+  const wait = waits[expiryIndex];
+  const checks = wait !== undefined ? checksFor(expiry, wait) : undefined;
+  const budget = budgetForLifetime(expiryIndex);
   const sharedLasts =
-    costs?.sharedCheck && budget ? Number((budget - costs.fill) / costs.sharedCheck) * market.sweepInterval : undefined;
+    costs?.sharedCheck && budget !== undefined && wait !== undefined
+      ? coverageSeconds(budget, costs.fill, costs.sharedCheck, wait)
+      : undefined;
 
   const inputBalance = input.isHbar ? wallet.hbarTinybar : wallet.token(input.address).balance;
   const allowance = input.isHbar ? undefined : wallet.token(input.address).allowance;
@@ -340,28 +338,17 @@ export const OrderTicket = ({ market, guard }: { market: MarketInfo; guard: Guar
             value={expiry}
             onChange={e => setExpiry(Number(e.target.value))}
           >
-            {EXPIRIES.map(e => (
-              <option key={e.seconds} value={e.seconds}>
-                {e.label}
-              </option>
-            ))}
+            {EXPIRIES.map((e, i) => {
+              const cost = budgetForLifetime(i);
+              return (
+                <option key={e.seconds} value={e.seconds}>
+                  {cost !== undefined ? `${e.label} · ${formatHbar(cost, 2)} budget` : e.label}
+                </option>
+              );
+            })}
           </select>
         </Field>
       </div>
-
-      <Field
-        label="Check budget covers"
-        hint={`market checks every ${market.sweepInterval / 60} min`}
-        htmlFor="coverage"
-      >
-        <div className="flex flex-wrap gap-1.5" id="coverage">
-          {COVERAGE.map(c => (
-            <Chip key={c.seconds} on={coverage === c.seconds} onClick={() => setCoverage(c.seconds)}>
-              {c.label}
-            </Chip>
-          ))}
-        </div>
-      </Field>
 
       <div
         className="grid gap-2 rounded-xl border border-dashed border-base-300 bg-base-200 p-4 text-sm leading-relaxed"
@@ -400,10 +387,14 @@ export const OrderTicket = ({ market, guard }: { market: MarketInfo; guard: Guar
         ) : (
           <span>Enter an amount and trigger to see what this order does.</span>
         )}
-        {costs && budget !== undefined && (
+        {costs && budget !== undefined && wait !== undefined && checks !== undefined && (
           <span className="text-base-content/80" data-testid="budget-line">
-            Check budget <b className="font-mono">{formatHbar(budget)}</b>: {formatHbar(costs.soloCheck)} per check
-            while this is the only open order in the market, plus {formatHbar(costs.fill)} held back for the fill.
+            Check budget <b className="font-mono">{formatHbar(budget)}</b> covers the whole{" "}
+            {EXPIRIES[expiryIndex].label}: at today&apos;s price the market checks this order about every{" "}
+            {durationText(wait)}, so {checks} {checks === 1 ? "check" : "checks"} at {formatHbar(costs.soloCheck)} each
+            while it is the only open order, plus {formatHbar(costs.fill)} held back for the fill and the last check.
+            Checks come faster as the price nears your trigger; if the budget runs out the order shows{" "}
+            <i>Budget empty</i> and you can top it up.
             {costs.sharedCheck !== undefined && costs.fundedOrders > 0 && sharedLasts !== undefined && (
               <>
                 {" "}
