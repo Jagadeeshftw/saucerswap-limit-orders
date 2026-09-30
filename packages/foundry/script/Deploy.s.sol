@@ -8,7 +8,7 @@ import { IHederaTokenService } from "../contracts/interfaces/IHederaTokenService
 import { ISaucerSwapV2Router } from "../contracts/interfaces/ISaucerSwapV2.sol";
 
 /// @notice Deploys OrderVault to Hedera testnet, creates its order NFT collection and lists both markets.
-/// @dev `yarn foundry:deploy --network hedera_testnet`. The deployer needs ~25 testnet HBAR.
+/// @dev Run through the root `foundry:deploy` script (Hedera testnet by default). The deployer needs ~25 testnet HBAR.
 ///
 ///      Forge runs a script locally before broadcasting it, and a local fork has no HTS system contract.
 ///      The script therefore mocks HTS for that local pass only. The broadcast transactions carry explicit

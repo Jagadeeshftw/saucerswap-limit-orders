@@ -23,7 +23,7 @@
     "outro": {
       "sections": [
         {
-          "title": "Next steps",
+          "title": "Then, in the project",
           "steps": [
             {
               "label": "Start the frontend (it uses the live testnet vault)",
@@ -32,6 +32,10 @@
             {
               "label": "Run the contract tests",
               "command": "{run:framework:test}"
+            },
+            {
+              "label": "Import or generate a deployer account, fund it from the faucet",
+              "command": "{run:framework:account:import}"
             },
             {
               "label": "Deploy your own vault to Hedera testnet (about 25 HBAR)",

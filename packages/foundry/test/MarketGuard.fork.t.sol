@@ -26,7 +26,7 @@ contract GuardHarness {
 }
 
 /// @notice Reads the real Hedera testnet pools and Chainlink feeds the template ships with.
-/// @dev Opt in with `FORK_TESTS=true yarn foundry:test:fork`. Swaps are not forked: SaucerSwap moves HTS
+/// @dev Runs through the root `foundry:test:fork` script, which sets `FORK_TESTS=true`. Swaps are not forked: SaucerSwap moves HTS
 ///      tokens, and HTS system contracts do not exist in a local fork.
 contract MarketGuardForkTest is Test {
     modifier onlyFork() {

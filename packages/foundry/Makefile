@@ -83,9 +83,8 @@ verify:
 	@if [ -z "$(CONTRACT)" ] || [ -z "$(CONTRACT_PATH)" ]; then \
 		echo "Usage: make verify CONTRACT=0xAddress CONTRACT_PATH=contracts/MyContract.sol:MyContract CHAIN_ID=296"; \
 		echo ""; \
-		echo "Or use yarn commands:"; \
-		echo "  yarn verify:testnet 0xAddress contracts/MyContract.sol:MyContract"; \
-		echo "  yarn verify:mainnet 0xAddress contracts/MyContract.sol:MyContract"; \
+		echo "Or run the root scripts foundry:verify:testnet / foundry:verify:mainnet with the same arguments"; \
+		echo "  (after -- when you run them through npm run)."; \
 		exit 1; \
 	fi
 	forge verify-contract $(CONTRACT) $(CONTRACT_PATH) --chain-id $(CHAIN_ID) --verifier sourcify

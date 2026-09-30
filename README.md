@@ -60,9 +60,9 @@ Prerequisites:
 - Git with `user.name` and `user.email` set; the CLI makes the first commit.
 - For the Corepack-managed package manager, run `corepack enable` once (Node 25 and later no longer bundle Corepack: `npm install -g corepack`).
 - Foundry 1.4 or later and `make`, for the contracts, tests and deploy scripts.
-- Chromium for the browser tests, once: `npx playwright install chromium`.
+- Chromium for the browser tests, once: `cd packages/nextjs && npx playwright install chromium`.
 
-The commands below are written for the package manager you chose. Flags for a script go after `--` when you run it through `npm run`, for example `npm run foundry:deploy -- --keystore my-key`.
+Commands below are shown for Yarn; in a project created with npm, the CLI has already rewritten them to `npm run <script>`. Put flags for a script after `--`, which works with both: `yarn foundry:deploy -- --keystore my-key`.
 
 ## Run it
 
@@ -128,7 +128,7 @@ yarn foundry:pool-gap             # HBAR/USDC
 MARKET=2 yarn foundry:pool-gap    # DAI/USDC
 ```
 
-It reads the pool's tick, liquidity and initialized ticks plus both feeds on a fork (the first run takes a minute or two), and prints the token and amount to sell into the pool, or that the pool is already inside the guard's limit. Swapping that amount through the SaucerSwap router re-aligns it. It moves the price for everyone and anyone can push it back, which is why the guard exists.
+It reads the pool's tick, liquidity and initialized ticks plus both feeds on a fork (the first run can take a minute), and prints the token and amount to sell into the pool, or that the pool is already inside the guard's limit. Swapping that amount through the SaucerSwap router re-aligns it. It moves the price for everyone and anyone can push it back, which is why the guard exists.
 
 ## When checks stop
 
@@ -206,10 +206,14 @@ docs/ARCHITECTURE.md                      design, cost model, threat model, inva
 `scripts/gate-check.mjs` reproduces the bounty's eligibility gate with the real `create-scaffold-hbar` CLI. It scaffolds the template with both package managers the manifest allows, then runs install, lint, type-check, build, the contract tests, a production and a dev boot with route checks, gitleaks, licence and manifest checks, and verifies every testnet proof above on the mirror node.
 
 ```bash
-node scripts/gate-check.mjs                 # scaffold the template from GitHub, as a stranger would (about 35 min)
-node scripts/gate-check.mjs --local         # scaffold from the working tree
-node scripts/gate-check.mjs --proofs-only   # just the testnet proofs
+node scripts/gate-check.mjs --proofs-only   # the testnet proofs; works anywhere
+node scripts/gate-check.mjs                 # template repo: scaffold it from GitHub, as a stranger would (about 35 min)
+node scripts/gate-check.mjs --local         # template repo: scaffold its working tree
 ```
+
+The two scaffolding modes check the template itself, so they belong in the template's own repo; in a project created from it they check the upstream template, and `--local` fails because the CLI has consumed `template.json`. They need gitleaks on your PATH.
+
+The template ships a lockfile for each package manager, so either one installs reproducibly. In a project created with npm, the CLI has already removed the other; otherwise `package-lock.json` is unused and can be deleted.
 
 ## Licence
 

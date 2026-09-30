@@ -31,7 +31,7 @@ Anvil has none of Hedera's system contracts, so the suite runs against these moc
 ## Deploy
 
 ```bash
-yarn foundry:account:import      # or account:generate, then fund it from the faucet
+yarn foundry:account:import      # or foundry:account:generate, then fund it from the faucet
 yarn foundry:deploy              # Hedera testnet (the default network)
 ```
 
