@@ -54,8 +54,18 @@ The frontend ships pointed at this vault, so `yarn next:dev` works without deplo
 ## Create a project
 
 ```bash
+# npm — note the `--` before the flags, or npm keeps them and the template flag is dropped
+npm create scaffold-hbar@latest my-app -- --template Jagadeeshftw/saucerswap-limit-orders
+
+# npx — no separator needed
 npx create-scaffold-hbar@latest my-app --template Jagadeeshftw/saucerswap-limit-orders
+
+# yarn
+yarn create scaffold-hbar my-app --template Jagadeeshftw/saucerswap-limit-orders
 ```
+
+With `npm create`, everything after `my-app` must follow a `--` separator, or npm swallows `--template` and you
+get the blank template instead of this one. The `npx` and `yarn create` forms pass the flag straight through.
 
 The CLI asks four questions: whether to install the Hedera Skills for AI coding agents, the network (pick testnet), the package manager, and whether to install dependencies. To answer them up front, for a script, CI or an agent without a terminal, add `--network testnet --yes` and `--package-manager` with your choice. `--yes` alone takes the template's default package manager and installs the Skills; add `--skip-hedera-skills` to leave them out.
 
@@ -76,6 +86,20 @@ yarn next:dev            # http://localhost:3000, against the live testnet vault
 ```
 
 Connect a wallet on Hedera testnet (chain 296) funded from the [portal faucet](https://portal.hedera.com/faucet). The Trade page walks you through associating the order NFT collection and the output token, approving the input token, and placing the order.
+
+## Get a Hedera testnet account
+
+New to Hedera? You need one testnet account with some HBAR, and an EVM (ECDSA) key.
+
+1. Open the [Hedera Portal](https://portal.hedera.com/), sign in, and create a **testnet** account. It is funded
+   with test HBAR and refills daily from the [faucet](https://portal.hedera.com/faucet).
+2. Choose an **ECDSA (secp256k1)** key, not ED25519. This template is EVM-native: the JSON-RPC relay, your
+   browser wallet and the deploy scripts all sign with an ECDSA key, and the portal shows its matching
+   `0x` EVM address. (ED25519 accounts work on Hedera generally but not through the EVM tooling here.)
+3. Every account has two names for the same thing: a Hedera id like `0.0.12345` and a 20-byte EVM address like
+   `0x…`. The mirror node maps between them; the UI and HashScan show both.
+4. Put the private key only in a gitignored `.env.local` (frontend) or import it into the Foundry keystore
+   (below) — never commit it.
 
 ## Deploy your own vault
 
@@ -209,6 +233,19 @@ Coverage of `OrderVault.sol`: 99.4% of lines, 96.1% of branches, 100% of functio
 | HBAR amounts off by 10^10 in your own code | Wallets send HBAR as 18-decimal weibar in `value`; the contracts count 8-decimal tinybar. Convert only through `utils/orders/units.ts`. |
 | Your own call to the vault reverts with no reason, using all its gas | The relay's `eth_estimateGas` undercounts Token Service and Schedule Service work (a placement estimated at 551,766 gas needs up to 2.8M). Pass an explicit limit; `utils/orders/gas.ts` has measured ones. Hedera bills only the gas used. |
 | Deploy fails with insufficient funds | Fund the deployer with at least 25 testnet HBAR; the NFT collection alone costs about 15. |
+
+## More documentation
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — how sweeps are scheduled and charged, the cost model, the threat
+  model, and the invariants.
+- [docs/PLUGINS-DESIGN.md](docs/PLUGINS-DESIGN.md) — the pluggable order-type design and trailing-stop semantics.
+- [docs/GLOSSARY.md](docs/GLOSSARY.md) — Hedera and project terms (HTS, HSS, tinybar/weibar, association, the
+  guard, sweeps, budgets).
+- [docs/FAQ.md](docs/FAQ.md) — the questions a first-time reader asks.
+- [docs/MAINNET-CHECKLIST.md](docs/MAINNET-CHECKLIST.md) — what to change before putting real value on it.
+
+A full documentation site is published separately at the address in the submission; it is single-sourced from
+these files.
 
 ## Layout
 
