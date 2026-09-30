@@ -44,7 +44,7 @@ Read `docs/ARCHITECTURE.md` before changing how sweeps are scheduled or charged.
 
 Rules that matter when you change the vault:
 
-- **Size.** OrderVault must stay under 24,576 bytes (`forge build --sizes`). Move logic into a library rather than turning off the check.
+- **Size.** OrderVault must stay under 24,576 bytes (`forge build --sizes`); it is at 24,242, so ~334 bytes free. Move logic into an external library (as `MarketGuard` and `OrderCollection` already do), or move read-only views to a lens contract, rather than turning off the check. See README "Extending the vault".
 - **Errors and events.** Use custom errors and events for every state change. The frontend decodes the order trail from events alone, via `utils/orders/trail.ts`.
 - **HTS calls.** Check the response code. Settlement must never revert a sweep: `_retireNft` and `_pay` report failure through events and credits.
 - **Scheduled calls.** Inside a scheduled call, `msg.sender == tx.origin == address(vault)`. Each schedule carries an epoch; a sweep with a stale epoch must return without touching orders. The vault pays for its own schedules, so every sweep must be charged to some order: routine checks to the batch, the final sweep to parking orders, superseded and empty runs to the order that caused them. The invariant tests enforce solvency and liveness (no funded order goes unchecked, no scheduled sweep reverts).

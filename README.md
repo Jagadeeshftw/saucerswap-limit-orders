@@ -144,7 +144,24 @@ If a market has funded orders but no check is scheduled, the Trade page and the 
 
 Topping up an order also restarts a stopped market.
 
-## What to change first
+## Extending the vault
+
+`OrderVault` compiles to **24,242 of the 24,576-byte** contract limit, so there are **334 bytes** of headroom
+(`forge build --sizes`). That is enough for a small change but not a large one, so before adding logic, know how
+to make room. In rough order of how much each frees:
+
+- **Move logic into an external library.** This is the biggest lever and the pattern the vault already uses:
+  `MarketGuard` (the Chainlink + TWAP read and bounds) and `OrderCollection` (the one-time NFT-collection
+  create) are `external` libraries called with `delegatecall`, which keeps their bytecode out of the vault.
+  Pricing and cost maths (`_gasToTinybar`, `_reserve`, the share calculations) or the scheduling internals are
+  the next candidates to extract the same way.
+- **Move the read-only views to a lens contract.** The cost and status views (`checkCost`, `fillCost`,
+  `minBudget`, `sweepStatus`, `nextCheckDelay`) exist for the frontend; a separate read-only "lens" contract can
+  hold them and read the vault's storage, freeing the vault of code it never needs on-chain.
+- **Keep using custom errors and events** (the vault has no revert strings) and keep storage structs packed
+  (`Order`, `SweepState`) — both are already done, and both are cheap ways to stay small.
+
+Once there is room, the usual changes:
 
 - **Add a market:** add a function to `script/MarketConfig.sol` like `usdcDai()` (both tokens need Chainlink feeds), call `listMarket` from `Deploy.s.sol`, and redeploy. The frontend lists every market the vault has.
 - **Tune how often checks run:** `SweepParams` (`minInterval`, `maxInterval`, `maxMoveBpsPerHour`). Lower `maxMoveBpsPerHour` costs less and reacts later. Change a live market with `updateMarket`.
@@ -169,7 +186,7 @@ yarn next:test:e2e         # Playwright at 1440 and 390, every UI state
 | Fork (live testnet) | 3 |
 | Frontend unit / e2e | 34 / 59 (30 specs at two widths; the burger-menu spec only runs at 390), plus one live-testnet spec |
 
-Coverage of `OrderVault.sol`: 99.4% of lines, 96.1% of branches, 100% of functions; the libraries are at 100%. The e2e suite runs a production build against a mocked relay, mirror node and injected wallet, so it is deterministic and never signs anything.
+Coverage of `OrderVault.sol`: 99.4% of lines, 96.1% of branches, 100% of functions; the libraries are at 100%. The handful of lines and branches the report marks uncovered are `forge coverage --ir-minimum` instrumentation artifacts — identical `return`/`revert`/`break` statements the IR pipeline merges into one target, plus a branch the fuzz suite exercises — so the code is behaviourally 100% covered; the neighbouring statements' hit counts show every path runs. The e2e suite runs a production build against a mocked relay, mirror node and injected wallet, so it is deterministic and never signs anything.
 
 ## Troubleshooting
 
