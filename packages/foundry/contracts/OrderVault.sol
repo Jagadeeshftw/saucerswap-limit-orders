@@ -416,6 +416,9 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
         pass.guard = guardReading(marketId);
         pass.rate = _rate();
         uint256[] memory batch = _nextBatch(marketId, m.sweep.maxOrders);
+        // Decided before the loop: orders that settle during it shrink the list, but the ones left out of this
+        // batch still need the next sweep soon.
+        bool rotating = _openOrders[marketId].length > batch.length;
         if (scheduled) (pass.share, pass.parkFee) = _batchCharges(batch, pass.rate);
         pass.reserveGas = _finishGas();
         pass.next = m.sweep.maxInterval;
@@ -430,7 +433,7 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
 
         uint256 open = _openOrders[marketId].length;
         s.cursor = open == 0 ? 0 : ((s.cursor + batch.length) % open).toUint32();
-        if (open > batch.length) pass.next = m.sweep.minInterval;
+        if (rotating) pass.next = m.sweep.minInterval;
         uint256 next = _backOff(m, s, pass.held, pass.next);
         emit SweepExecuted(marketId, scheduled, pass.guard.state, pass.checked, pass.filled, open);
 

@@ -44,7 +44,7 @@ The vault is [0.0.10787941](https://hashscan.io/testnet/contract/0.0.10787941) (
 | **Cancel by the NFT holder.** Order #3 cancelled; 1 HBAR and 8.3537 HBAR of budget refunded, 0.1141 HBAR kept to pay for the pending sweep it left behind | [1790748978.071959657](https://hashscan.io/testnet/transaction/1790748978.071959657) |
 | **The order follows its NFT.** Order #4's NFT was transferred to another account, the original owner's cancel reverts with `NotHolder`, and the new holder cancels and receives the refund | transfer [1790748105.334112819](https://hashscan.io/testnet/transaction/1790748105.334112819), cancel by the new holder [1790748137.174472309](https://hashscan.io/testnet/transaction/1790748137.174472309) |
 
-The frontend ships pointed at this vault, so `yarn next:dev` works without deploying anything.
+The frontend ships pointed at this vault, so `yarn next:dev` works without deploying anything. That vault predates one small fix to how a sweep rotates through more than 20 open orders; see [Known limits](docs/ARCHITECTURE.md#known-limits).
 
 ## Create a project
 
@@ -158,7 +158,7 @@ yarn next:test:e2e         # Playwright at 1440 and 390, every UI state
 
 | Suite | Tests |
 | --- | --- |
-| Unit (`OrderVault.t.sol`, `OrderVault.edges.t.sol`, `PriceMath.t.sol`, handler checks) | 103 |
+| Unit (`OrderVault.t.sol`, `OrderVault.edges.t.sol`, `PriceMath.t.sol`, handler checks) | 104 |
 | Fuzz (vault and price maths, 256 runs each) | 12 |
 | Invariant (escrow, solvency, credits, bookkeeping, NFTs, liveness; 256 runs × 500 calls) | 6 |
 | Fork (live testnet) | 3 |

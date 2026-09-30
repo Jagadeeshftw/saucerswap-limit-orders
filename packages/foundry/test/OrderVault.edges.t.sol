@@ -127,6 +127,31 @@ contract OrderVaultEdgeTest is OrderVaultBase {
         assertEq(hss.last().expiry, block.timestamp + 300, "unchecked orders are picked up at minInterval");
     }
 
+    function test_sweep_rotationStaysFastWhenAnOrderSettlesMidSweep() public {
+        Market memory m = vault.getMarket(HBAR_MARKET);
+        m.sweep.maxOrders = 2;
+        m.sweep.maxFills = 1;
+        vm.prank(owner);
+        vault.updateMarket(HBAR_MARKET, m.guard, m.sweep, true);
+        // The first order expires at the first sweep; the third doesn't fit in that sweep's batch of two.
+        PlaceParams memory soon = _sellParams(FAR);
+        soon.expiry = uint40(block.timestamp + 600);
+        uint256 budget = vault.minBudget(HBAR_MARKET, Side.SellBase);
+        vm.prank(alice);
+        uint256 expiring = vault.placeOrder{ value: 250e8 + budget }(soon);
+        _sellHbar(alice, FAR, Trigger.AtOrAbove);
+        uint256 left = _sellHbar(alice, FAR, Trigger.AtOrAbove);
+        uint256 leftBudget = vault.getOrder(left).budget;
+
+        _runScheduledSweep(HBAR_MARKET);
+        assertEq(uint8(vault.getOrder(expiring).status), uint8(Status.Expired));
+        assertEq(vault.getOrder(left).budget, leftBudget, "not in this batch");
+        // Two orders remain, as many as a batch holds, but one of them hasn't been checked yet.
+        assertEq(hss.last().expiry, block.timestamp + 300, "the next sweep comes at minInterval");
+        _runScheduledSweep(HBAR_MARKET);
+        assertLt(vault.getOrder(left).budget, leftBudget, "checked on the next sweep");
+    }
+
     function test_findCapacity_movesPastBusySeconds() public {
         hss.setBusyUntil(block.timestamp + FAR_DELAY + 1);
         _sellHbar(alice, FAR, Trigger.AtOrAbove);

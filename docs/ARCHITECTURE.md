@@ -154,6 +154,7 @@ The ticket sizes the budget to cover the order's whole lifetime at today's dista
 ### Known limits
 
 - **Payer liquidity.** HSS reserves `gasLimit × gas price` from the vault when a sweep runs. The vault's balance always includes every order's escrowed HBAR and budget, so this is covered in practice. But if the owner withdrew all surplus and the book were a single token-in order close to parking, the balance could fall under the ~2.8 HBAR reservation, and that sweep would fail with `INSUFFICIENT_PAYER_BALANCE`. The UI would show "Checks stopped"; topping up restarts it. Keep a few HBAR of surplus in the vault.
+- **The reference vault predates one fix.** 0.0.10787941 was deployed before the sweep decided on rotation up front. There, in a market with more than `maxOrders` open orders where one settles during a sweep, an order left out of that batch can wait one extra cycle, up to about twice `maxInterval`, before it is checked. The contracts in this repo have the fix (`test_sweep_rotationStaysFastWhenAnOrderSettlesMidSweep`), and a vault you deploy includes it.
 - **An NFT sent to the vault** settles into a credit nobody can claim. Sending your order to the vault gives it up.
 - **Testnet pools.** The only testnet HBAR/USDC pool trades about 19× above Chainlink, so its guard never opens there (see the README for the numbers and how to re-align a pool).
 
