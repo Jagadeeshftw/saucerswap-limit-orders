@@ -126,6 +126,14 @@ A fill needs both Chainlink feeds to be fresh (`maxOracleAge`) and the pool's TW
 
 The only HBAR/USDC pool on testnet ([0.0.9283328](https://hashscan.io/testnet/contract/0.0.9283328)) prices HBAR at about 2.02 USDC while Chainlink says 0.104, so its guard stays closed and HBAR orders are held, which is the guard doing its job. Aligning that pool would take selling about **51,500 HBAR** into it (the exact figure moves with Chainlink; `yarn foundry:pool-gap` prints today's), and creating a new pool costs SaucerSwap's `poolCreateFee` of 1e16 tinycents (**$1,000,000, about 12,975,835 testnet HBAR**). No testnet HBAR pool sits within 2% of Chainlink. The DAI/USDC pool does (23 bps), so DAI orders fill: a working stablecoin stop-loss. Both markets run the same code, and on an arbitraged network HBAR/USDC fills too.
 
+**Proof on a mainnet fork.** Mainnet's HBAR/USDC pool *is* arbitraged, so there the same guard opens. A fork test reads the real mainnet 0.15% pool and Chainlink and asserts `GuardState.Open` — on testnet the guard correctly holds, on a mainnet fork it opens:
+
+```bash
+yarn foundry:fork-guard    # forks Hedera mainnet, asserts the HBAR/USDC guard opens
+```
+
+It needs a mainnet RPC (the `hedera_mainnet` endpoint, public hashio by default) and skips with a message if one isn't reachable. It reads Chainlink and the pool TWAP only — no swap, no HTS — so it is a pure, real read of live mainnet state. At last run the pool sat ~7 bps from Chainlink and the guard opened.
+
 To see how far a pool is from Chainlink and what it would take to bring it back:
 
 ```bash

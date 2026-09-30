@@ -24,7 +24,8 @@
     "test:mainnet": "forge test --fork-url https://mainnet.hashio.io/api --chain-id 295 --ffi",
     "test:testnet": "forge test --fork-url ${HEDERA_RPC_URL:-https://testnet.hashio.io/api} --chain-id 296 --ffi",
     "verify:mainnet": "forge verify-contract --chain-id 295 --verifier sourcify",
-    "verify:testnet": "forge verify-contract --chain-id 296 --verifier sourcify"
+    "verify:testnet": "forge verify-contract --chain-id 296 --verifier sourcify",
+    "fork-guard": "MAINNET_FORK=true forge test --match-contract MarketGuardMainnetForkTest -vv"
   },
   "dependencies": {
     "dotenv": "~16.3.1",
