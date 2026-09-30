@@ -6,7 +6,7 @@ import heldOrderLogs from "~~/utils/orders/__fixtures__/order-3-held-logs.json";
 import filledOrderLogs from "~~/utils/orders/__fixtures__/order-5-logs.json";
 import { buildTrail, decodeOrderLogs } from "~~/utils/orders/trail";
 
-// Real mirror-node logs of the testnet vault 0.0.10787941 (2026-09-30): order #5, filled by a scheduled sweep, and
+// Real mirror-node logs of the testnet vault 0.0.10792085 (2026-09-30): order #5, filled by a scheduled sweep, and
 // order #3 through its first two scheduled checks, both held by the guard (it was cancelled afterwards).
 const abi = deployedContracts[296].OrderVault.abi as Abi;
 const DAI = { symbol: "DAI", decimals: 8 };

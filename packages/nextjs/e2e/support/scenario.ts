@@ -8,9 +8,9 @@ import filledOrderLogs from "../../utils/orders/__fixtures__/order-5-logs.json";
 
 export const ACCOUNT = "0x70997970c51812dc3a010c7d01b50e0d17dc79c8" as const;
 export const ACCOUNT_ID = "0.0.4101";
-export const VAULT_ID = "0.0.10787941";
-export const COLLECTION = "0x0000000000000000000000000000000000a49c67" as const;
-export const COLLECTION_ID = "0.0.10787943";
+export const VAULT_ID = "0.0.10792085";
+export const COLLECTION = "0x0000000000000000000000000000000000a4ac96" as const;
+export const COLLECTION_ID = "0.0.10792086";
 export const WHBAR = "0x0000000000000000000000000000000000003ad2" as const;
 export const USDC = "0x0000000000000000000000000000000000001549" as const;
 export const DAI = "0x0000000000000000000000000000000000001599" as const;

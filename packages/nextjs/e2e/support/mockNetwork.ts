@@ -81,7 +81,7 @@ const MARKETS = {
  * Costs as the reference vault reported them on testnet (tinybar), and the vault's sharing rule:
  * each order pays an even share of the sweep's fixed gas plus its own check gas.
  */
-// checkCost and fillCost (the fill plus the final check) as the live vault 0.0.10787941 returned them.
+// checkCost and fillCost (the fill plus the final check) as the live vault 0.0.10792085 returned them.
 const COSTS = { checkCost: 189_774_952n, fillHbarIn: 87_680_832n, fillTokenIn: 123_714_051n };
 const FIXED_GAS = 1_520_000n;
 const CHECK_GAS = 60_000n;

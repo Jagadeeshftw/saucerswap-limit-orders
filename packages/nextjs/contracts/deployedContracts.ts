@@ -7,7 +7,7 @@ import { GenericContractsDeclaration } from "~~/utils/scaffold-hbar/contract";
 const deployedContracts = {
   296: {
     OrderVault: {
-      address: "0x86867b8261f07b2be5427692417bb6b36e4e644a",
+      address: "0xba9c496d229b9868a804c2bcfbeac97e2bad1b1d",
       abi: [
         {
           type: "constructor",
@@ -363,6 +363,13 @@ const deployedContracts = {
             },
           ],
           stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
+          name: "fund",
+          inputs: [],
+          outputs: [],
+          stateMutability: "payable",
         },
         {
           type: "function",
@@ -922,6 +929,19 @@ const deployedContracts = {
               name: "",
               type: "address",
               internalType: "address",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "payerFloat",
+          inputs: [],
+          outputs: [
+            {
+              name: "float",
+              type: "uint256",
+              internalType: "uint256",
             },
           ],
           stateMutability: "view",
@@ -1557,6 +1577,25 @@ const deployedContracts = {
             },
             {
               name: "poolPrice",
+              type: "uint256",
+              indexed: false,
+              internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "Funded",
+          inputs: [
+            {
+              name: "from",
+              type: "address",
+              indexed: true,
+              internalType: "address",
+            },
+            {
+              name: "amount",
               type: "uint256",
               indexed: false,
               internalType: "uint256",
@@ -2303,7 +2342,7 @@ const deployedContracts = {
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 41165981,
+      deployedOnBlock: 41177419,
     },
   },
 } as const;
