@@ -52,7 +52,7 @@ The frontend ships pointed at this vault, so `yarn next:dev` works without deplo
 npx create-scaffold-hbar@latest my-app --template Jagadeeshftw/saucerswap-limit-orders
 ```
 
-The CLI asks three questions: the package manager, the network (pick testnet), and whether to install the Hedera Skills for AI coding agents. To answer them up front, for a script, CI or an agent without a terminal, add `--network testnet --yes` and `--package-manager` with your choice. `--yes` alone takes the template's default package manager.
+The CLI asks four questions: whether to install the Hedera Skills for AI coding agents, the network (pick testnet), the package manager, and whether to install dependencies. To answer them up front, for a script, CI or an agent without a terminal, add `--network testnet --yes` and `--package-manager` with your choice. `--yes` alone takes the template's default package manager and installs the Skills; add `--skip-hedera-skills` to leave them out.
 
 Prerequisites:
 
@@ -62,7 +62,7 @@ Prerequisites:
 - Foundry 1.4 or later and `make`, for the contracts, tests and deploy scripts.
 - Chromium for the browser tests, once: `cd packages/nextjs && npx playwright install chromium`.
 
-Commands below are shown for Yarn; in a project created with npm, the CLI has already rewritten them to `npm run <script>`. Put flags for a script after `--`, which works with both: `yarn foundry:deploy -- --keystore my-key`.
+Commands below use the project's package manager; on GitHub they are shown for the template's default, and a project created with the other one gets them rewritten by the CLI. Put flags for a script after `--`, which works with both: `yarn foundry:deploy -- --keystore my-key`.
 
 ## Run it
 
@@ -211,7 +211,7 @@ node scripts/gate-check.mjs                 # template repo: scaffold it from Gi
 node scripts/gate-check.mjs --local         # template repo: scaffold its working tree
 ```
 
-The two scaffolding modes check the template itself, so they belong in the template's own repo; in a project created from it they check the upstream template, and `--local` fails because the CLI has consumed `template.json`. They need gitleaks on your PATH.
+The two scaffolding modes check the template itself, so they belong in the template's own repo. In a project created from it, the default mode checks the upstream template, and `--local` stops at once because the CLI has removed `template.json`. They need gitleaks on your PATH, and an interrupted run cleans up its temp workspace.
 
 The template ships a lockfile for each package manager, so either one installs reproducibly. In a project created with npm, the CLI has already removed the other; otherwise `package-lock.json` is unused and can be deleted.
 

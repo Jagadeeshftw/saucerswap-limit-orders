@@ -105,10 +105,14 @@ function killAll() {
   for (const child of liveChildren) killTree(child);
 }
 
+/** The run's temp workspace, removed if the run is interrupted (unless --keep). */
+let interruptCleanup = () => {};
+
 process.on("exit", killAll);
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => {
     killAll();
+    interruptCleanup();
     process.exit(130);
   });
 }
@@ -300,13 +304,13 @@ async function checkManifestReachable({ owner, repo, ref }) {
   record("remote", "template.json fetchable where the CLI looks", res.ok ? "pass" : "fail", `HTTP ${res.status}`);
 }
 
-// The CLI deletes the Berry lockfile in npm mode, so each package manager needs its own lockfile to stay reproducible.
+// The CLI deletes the Berry lockfile in npm-mode projects, so each package manager needs its own lockfile to stay reproducible.
 async function checkLockfiles(src, pms, env, logFile) {
   const leaksLocalPath = text => /\/Users\/|\/home\/|file:\//.test(text);
   if (pms.includes("npm")) {
     const lock = path.join(src, "package-lock.json");
     const text = fs.existsSync(lock) ? fs.readFileSync(lock, "utf8") : null;
-    record("source", "package-lock.json for npm mode", text && !leaksLocalPath(text) ? "pass" : "fail", !text ? "missing" : leaksLocalPath(text) ? "contains local absolute paths" : "");
+    record("source", "package-lock.json for npm-mode projects", text && !leaksLocalPath(text) ? "pass" : "fail", !text ? "missing" : leaksLocalPath(text) ? "contains local absolute paths" : "");
   }
   if (!pms.includes(YARN)) return;
   const lock = path.join(src, `${YARN}.lock`);
@@ -559,12 +563,20 @@ async function main() {
     await checkTestnetProofs(false);
     process.exit(results.some(r => r.status === "fail") ? 1 : 0);
   }
+  if (opts.local && !fs.existsSync(path.join(REPO_ROOT, "template.json"))) {
+    console.error(
+      "--local checks the template's own working tree, and there is no template.json here (the CLI removes it from\n" +
+        "projects it creates). Run it in the template repo, or use --proofs-only.",
+    );
+    process.exit(1);
+  }
   const template = opts.template ?? originTemplate();
   const ref = parseTemplateRef(template);
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "scaffold-hbar-gate-"));
   const binDir = path.join(workDir, "bin");
   fs.mkdirSync(binDir);
   const env = baseEnv(workDir, binDir);
+  if (!opts.keep) interruptCleanup = () => fs.rmSync(workDir, { recursive: true, force: true });
   console.log(`Gate check: ${template}${opts.local ? " (local working tree)" : ""}\nWorkspace: ${workDir}`);
 
   record("env", `node ${process.version} >= ${MIN_NODE.join(".")}`, versionAtLeast(process.version, MIN_NODE) ? "pass" : "fail");

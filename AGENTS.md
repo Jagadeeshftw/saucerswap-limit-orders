@@ -58,7 +58,7 @@ Rules that matter when you change the vault:
 ## Frontend
 
 - Pages: `app/page.tsx` (Trade, `?market=<id>`), `app/orders/page.tsx` (My orders) and `app/orders/[id]/page.tsx` (order detail and trail).
-- `hooks/orders/`: vault reads (`useMarkets`, `useOrders`, `useSweepStatus`, `useCheckDelays`), wallet setup (`useWallet`: associations, balances, allowances) and transaction state (`useVaultTx`).
+- `hooks/orders/`: vault reads (`useMarkets`, `useMyOrders`, `useOrder`, `useOrderTrail`, `useSweepStatus`, `useCheckDelays`), wallet setup (`useWallet`: associations, balances, allowances) and transaction state (`useVaultTx`).
 - `utils/orders/budget.ts`: sizes a budget to an order's lifetime from the vault's `nextCheckDelay` and cost views.
 - `components/orders/SweepStatusBanner.tsx`: the "Checks stopped" state with a restart button.
 - `services/mirror.ts`: mirror-node queries. Topic-filtered log queries need a timestamp range under 7 days, so `fetchLogs` splits the range into windows.
@@ -77,6 +77,6 @@ UI rules: use DaisyUI classes, no motion, and every state must look right at 144
 | `UpperCamelCase` | types, components, contracts |
 | `lowerCamelCase` | variables, functions |
 | `CONSTANT_CASE` | constants |
-| `snake_case` | Foundry scripts |
+| `UpperCamelCase.s.sol` | Foundry scripts (`Deploy.s.sol`, `PoolGap.s.sol`) |
 
 Next.js imports use the `~~` alias. Prefer `type` over `interface`, and let TypeScript infer when it can. Solidity uses NatSpec on external functions and custom errors, not revert strings. Comments should add information.
