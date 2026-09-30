@@ -24,6 +24,7 @@ const capture = async (page: Page, name: string) => {
     [390, 900],
   ]) {
     await page.setViewportSize({ width, height });
+    await page.evaluate(() => window.scrollTo(0, 0)); // keep the sticky header at the top of a full-page capture
     for (const scheme of ["light", "dark"] as const) {
       await page.emulateMedia({ colorScheme: scheme });
       await page.waitForTimeout(400);
@@ -56,7 +57,9 @@ test("a stop-loss placed in the UI is filled by the Schedule Service", async ({ 
   await page.addInitScript(
     ({ address, rpc }) => {
       const listeners: Record<string, ((value: unknown) => void)[]> = {};
-      let accounts: string[] = [];
+      // Like a real wallet, remember that this site was approved, so reloads stay connected.
+      const approved = () => sessionStorage.getItem("e2e-live-approved") === "1";
+      let accounts: string[] = approved() ? [address] : [];
       let id = 0;
       const forward = async (method: string, params: unknown[]) => {
         const res = await fetch(rpc, {
@@ -77,6 +80,7 @@ test("a stop-loss placed in the UI is filled by the Schedule Service", async ({ 
           switch (method) {
             case "eth_requestAccounts":
               accounts = [address];
+              sessionStorage.setItem("e2e-live-approved", "1");
               (listeners.accountsChanged ?? []).forEach(l => l(accounts));
               return accounts;
             case "eth_accounts":
@@ -135,7 +139,8 @@ test("a stop-loss placed in the UI is filled by the Schedule Service", async ({ 
   }).toPass({ timeout: 15 * 60_000, intervals: [30_000] });
   await capture(page, "L5-live-order-filled");
 
-  await page.goto("/orders");
+  // Navigate in-app: a full reload would drop this test wallet's connection, which a real wallet remembers.
+  await page.getByRole("link", { name: "My orders" }).first().click();
   await expect(page.getByTestId("orders-summary")).toBeVisible({ timeout: 60_000 });
   await capture(page, "L6-live-my-orders");
 });

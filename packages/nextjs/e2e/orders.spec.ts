@@ -9,6 +9,7 @@ const capture = async (page: Page, info: TestInfo, state: string) => {
   const dir = process.env.SCREENSHOTS_DIR;
   if (!dir) return;
   const width = info.project.name === "mobile" ? 390 : 1440;
+  await page.evaluate(() => window.scrollTo(0, 0)); // keep the sticky header at the top of a full-page capture
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     await page.waitForTimeout(300);

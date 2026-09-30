@@ -24,6 +24,14 @@
       "description": "Schedule Service fills order #5 on SaucerSwap V2 (no keeper)"
     },
     {
+      "timestamp": "1790750114.233194363",
+      "scheduled": true,
+      "contract": "0x86867b8261f07b2be5427692417bb6b36e4e644a",
+      "event": "OrderFilled",
+      "topic0": "0x4eac0bcdf713c4feb523019bdbf1c5035d9fcc44aadb6a69e0777e235082f6eb",
+      "description": "Order #6, placed through the frontend, filled by the Schedule Service"
+    },
+    {
       "timestamp": "1790748334.031783104",
       "scheduled": true,
       "contract": "0x86867b8261f07b2be5427692417bb6b36e4e644a",
@@ -41,12 +49,45 @@
       "minLogs": 2
     },
     {
+      "timestamp": "1790748978.071959657",
+      "scheduled": false,
+      "contract": "0x86867b8261f07b2be5427692417bb6b36e4e644a",
+      "event": "OrderCancelled",
+      "topic0": "0x8cd7e382eb42bcc84841dacd15adda3bdd77aefce75edd49238bd47995b1f968",
+      "description": "Order #3 cancelled by its NFT holder; escrow and budget refunded"
+    },
+    {
       "timestamp": "1790748137.174472309",
       "scheduled": false,
       "contract": "0x86867b8261f07b2be5427692417bb6b36e4e644a",
       "event": "OrderCancelled",
       "topic0": "0x8cd7e382eb42bcc84841dacd15adda3bdd77aefce75edd49238bd47995b1f968",
       "description": "Order #4 cancelled by the account its NFT was transferred to"
+    },
+    {
+      "timestamp": "1790751904.044771633",
+      "scheduled": true,
+      "contract": "0x86867b8261f07b2be5427692417bb6b36e4e644a",
+      "event": "BudgetExhausted",
+      "topic0": "0xe3bbed9ba4ea66661cbf21701baf30a52ea330ce76f1be3ca59360048ecb1894",
+      "description": "A scheduled sweep parks orders #1 and #2 when their budgets run out",
+      "minLogs": 2
+    },
+    {
+      "timestamp": "1790751932.357705822",
+      "scheduled": false,
+      "contract": "0x86867b8261f07b2be5427692417bb6b36e4e644a",
+      "event": "BudgetToppedUp",
+      "topic0": "0x908e184df46f5e7e1ef7f34f02b3f94a910f9d1e67c2fbdf158b549758370acb",
+      "description": "Top-up revives order #1 and restarts the market's sweep"
+    },
+    {
+      "timestamp": "1790752231.036664782",
+      "scheduled": true,
+      "contract": "0x86867b8261f07b2be5427692417bb6b36e4e644a",
+      "event": "OrderChecked",
+      "topic0": "0x1a7dbf431965c6067a9b8aea714120177a1e0d555a6dd0078b62e17d9ae1847b",
+      "description": "Checks resume: the restarted sweep charges order #1 again"
     }
   ]
 }

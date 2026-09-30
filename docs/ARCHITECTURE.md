@@ -148,6 +148,7 @@ The ticket sizes the budget to cover the order's whole lifetime at today's dista
 | Checks stop | `sweepStatus` reports `Stalled`; anyone can `restartSweep`; the UI shows "Checks stopped" with a restart button | unit, e2e |
 | Fill runs out of gas | The swap gets `gasleft() − reserve`, so the reschedule always runs; a short sweep rechecks at `minInterval` | unit, invariant (no scheduled sweep reverts) |
 | Token association | The vault associates market tokens at listing; the UI checks the mirror node and offers HIP-719 `associate()`; failed payouts are credited | unit, e2e |
+| Wallet gas estimates too low | The relay's `eth_estimateGas` undercounts HTS and HSS work (a placement estimated at 551,766 needs up to 2.8M), so every such call sends a measured limit from `utils/orders/gas.ts`; Hedera bills only gas used | e2e asserts the limit; live spec places orders on testnet |
 | Decimals (HBAR 8 in the EVM, 18 in wallet `value`; USDC 6; DAI 8; Chainlink 8) | Contracts use tinybar; `units.ts` is the only conversion module | vitest, fuzz |
 
 ### Known limits
