@@ -126,7 +126,7 @@ Deploys sign with a Foundry keystore, so no private key goes in any file.
 
 ## What an order costs
 
-Hedera charges a fixed fee to schedule a contract call: about $0.12 (`ScheduleCreate` with a `ContractCall`, $0.0099 + $0.09, plus the 20% system-contract surcharge). That is 89% of a check, whatever the gas limit or delay. So the vault saves money the only way it can, by running fewer sweeps: each one waits about as long as the price needs to reach the nearest trigger.
+Hedera charges a fixed fee to schedule a contract call: about 1.56 HBAR (≈ $0.12 on 2026-09-29; Hedera sets the `ScheduleCreate` and inner `ContractCall` fees in USD, plus a 20% system-contract surcharge, so the HBAR figure moves with the exchange rate). That is 89% of a check, whatever the gas limit or delay. So the vault saves money the only way it can, by running fewer sweeps: each one waits about as long as the price needs to reach the nearest trigger.
 
 | Market | Checks at most every | at least every | assumed fastest move |
 | --- | --- | --- | --- |
@@ -148,7 +148,7 @@ The trade-off: a price that moves faster than the assumed rate is noticed late. 
 
 A fill needs both Chainlink feeds to be fresh (`maxOracleAge`) and the pool's TWAP over `twapWindow` to sit within `maxDeviationBps` of the Chainlink price. The trigger is read from Chainlink, and the minimum output is Chainlink's price less your slippage. Someone who pushes the pool around can't trigger your order or fill it at a bad price; the order waits.
 
-The only HBAR/USDC pool on testnet ([0.0.9283328](https://hashscan.io/testnet/contract/0.0.9283328)) prices HBAR at about 2.02 USDC while Chainlink says 0.104, so its guard stays closed and HBAR orders are held, which is the guard doing its job. Aligning that pool would take selling about **51,500 HBAR** into it (the exact figure moves with Chainlink; `yarn foundry:pool-gap` prints today's), and creating a new pool costs SaucerSwap's `poolCreateFee` of 1e16 tinycents (**$1,000,000, about 12,975,835 testnet HBAR**). No testnet HBAR pool sits within 2% of Chainlink. The DAI/USDC pool does (23 bps), so DAI orders fill: a working stablecoin stop-loss. Both markets run the same code, and on an arbitraged network HBAR/USDC fills too.
+The only HBAR/USDC pool on testnet ([0.0.9283328](https://hashscan.io/testnet/contract/0.0.9283328)) prices HBAR at about 2.02 USDC while Chainlink says 0.104, so its guard stays closed and HBAR orders are held, which is the guard doing its job. Aligning that pool would take selling about **51,500 HBAR** into it (the exact figure moves with Chainlink; `yarn foundry:pool-gap` prints today's), and creating a new pool costs SaucerSwap's `poolCreateFee` of 1e16 tinycents (**about 12,975,835 testnet HBAR**, ≈ $1,000,000 on 2026-09-29). No testnet HBAR pool sits within 2% of Chainlink. The DAI/USDC pool does (23 bps), so DAI orders fill: a working stablecoin stop-loss. Both markets run the same code, and on an arbitraged network HBAR/USDC fills too.
 
 **Proof on a mainnet fork.** Mainnet's HBAR/USDC pool *is* arbitraged, so there the same guard opens. A fork test reads the real mainnet 0.15% pool and Chainlink and asserts `GuardState.Open` — on testnet the guard correctly holds, on a mainnet fork it opens:
 
@@ -178,33 +178,47 @@ Topping up an order also restarts a stopped market.
 
 ## Extending the vault
 
-`OrderVault` compiles to **24,242 of the 24,576-byte** contract limit, so there are **334 bytes** of headroom
-(`forge build --sizes`). That is enough for a small change but not a large one, so before adding logic, know how
-to make room. In rough order of how much each frees:
+`OrderVault` compiles to **21,254 of the 24,576-byte** contract limit, so there are **3,322 bytes** of headroom
+(`forge build --sizes`). It got there by keeping only the core flow in the vault — place, sweep, evaluate, guard,
+fill, settle — and moving everything else out:
 
-- **Move logic into an external library.** This is the biggest lever and the pattern the vault already uses:
-  `MarketGuard` (the Chainlink + TWAP read and bounds) and `OrderCollection` (the one-time NFT-collection
-  create) are `external` libraries called with `delegatecall`, which keeps their bytecode out of the vault.
-  Pricing and cost maths (`_gasToTinybar`, `_reserve`, the share calculations) or the scheduling internals are
-  the next candidates to extract the same way.
-- **Move the read-only views to a lens contract.** The cost and status views (`checkCost`, `fillCost`,
-  `minBudget`, `sweepStatus`, `nextCheckDelay`) exist for the frontend; a separate read-only "lens" contract can
-  hold them and read the vault's storage, freeing the vault of code it never needs on-chain.
+| Where | What | Why it is out of the vault |
+| --- | --- | --- |
+| `LimitOrderType`, `StopOrderType`, `TrailingStopType` | When an order fires and how far it is from firing | Order types are plug-ins: separate view-only contracts the vault `staticcall`s, registered with `registerOrderType`. A new type needs no vault change and no redeploy (see [docs/PLUGINS-DESIGN.md](docs/PLUGINS-DESIGN.md)). |
+| `OrderVaultLens` | The cost and status previews the frontend reads (`minBudget`, `checkCost`, `fillCost`, `nextCheckDelay`, `sweepStatus`, `previewCharges`, `surplus`, …) | Nothing on-chain needs them. The lens computes them from the vault's raw state. |
+| `SweepMath` (internal library) | Every number the vault charges or schedules by | Compiled into both the vault and the lens, so a preview and the real charge come from the same code and cannot drift. |
+| `Settlement` (external library) | The SaucerSwap swap, HTS token and order-NFT operations, ERC-20 moves | Call-encoding-heavy code, linked rather than inlined. |
+| `MarketRegistry` (external library) | Listing and tuning markets, and their bounds | Owner-only and run once per market, so no sweep pays for the call. |
+| `MarketGuard`, `OrderCollection` (external libraries) | The Chainlink + TWAP read, the one-time NFT collection | As in v1.0. |
+
+Before adding code to the vault, decide where it belongs:
+
+- **A new kind of order** is a new order type, not a vault change.
+- **A new read for the UI** goes in `OrderVaultLens`, and any arithmetic it shares with the vault goes in `SweepMath`.
+- **Cold code** (owner-only, once per market, rarely run) can move to an external library like `MarketRegistry`.
+  Keep **hot code** (anything every sweep runs) in the vault: an external library call costs a cold
+  `delegatecall` each time. The capacity probe was measured at ~3,300 gas per rescheduling sweep when it lived in
+  `Settlement`, which is why it is inline again. The next cold candidates, measured by stubbing them out, are
+  `restartSweep` (~160 bytes) and `withdrawSurplus` (~350 bytes).
 - **Keep using custom errors and events** (the vault has no revert strings) and keep storage structs packed
-  (`Order`, `SweepState`) — both are already done, and both are cheap ways to stay small.
+  (`Order`, `SweepState`).
+
+`test/GasMeasure.t.sol` is the before/after gas report: it runs the same sweeps on the v1.0.1 vault and this one,
+each sweep in its own transaction (`forge test --match-contract GasMeasure --isolate -vv`). Run it after a change
+to the sweep path and fold the difference into `MarketConfig.costs()`.
 
 Once there is room, the usual changes:
 
 - **Add a market:** add a function to `script/MarketConfig.sol` like `usdcDai()` (both tokens need Chainlink feeds), call `listMarket` from `Deploy.s.sol`, and redeploy. The frontend lists every market the vault has.
 - **Tune how often checks run:** `SweepParams` (`minInterval`, `maxInterval`, `maxMoveBpsPerHour`). Lower `maxMoveBpsPerHour` costs less and reacts later. Change a live market with `updateMarket`.
 - **Tune the guard:** `GuardParams`. `MarketGuard.paramsValid` keeps it meaningful: TWAP 5 min to 1 day, oracle age 60 s to 26 h, deviation and slippage at most 10%.
-- **Recalibrate costs:** measure a few scheduled sweeps on the mirror node (`gas_used` in `/api/v1/contracts/{id}/results/{timestamp}`) and call `setCosts`. The frontend reads costs from the vault, so nothing else changes.
+- **Recalibrate costs:** measure a few scheduled sweeps on the mirror node (`gas_used` in `/api/v1/contracts/{id}/results/{timestamp}`) and call `setCosts`. The frontend reads costs through the lens, so nothing else changes.
 - **Mainnet:** add mainnet addresses to `MarketConfig.sol`, allow chain 295 in `Deploy.s.sol` (it deploys to testnet only), add the network to `scaffold.config.ts`, and tighten `maxOracleAge` to the mainnet feeds' heartbeat.
 
 ## Tests
 
 ```bash
-yarn foundry:test          # unit, fuzz, edge and invariant suites (mocked Hedera system contracts), 3-4 min
+yarn foundry:test          # unit, fuzz, edge, invariant and differential suites (mocked Hedera system contracts), 4-8 min
 yarn foundry:test:fork     # the guard against the real testnet pools and feeds
 yarn next:test             # frontend units: amounts, prices, budgets, order trail
 yarn next:test:e2e         # Playwright at 1440 and 390, every UI state
@@ -212,13 +226,17 @@ yarn next:test:e2e         # Playwright at 1440 and 390, every UI state
 
 | Suite | Tests |
 | --- | --- |
-| Unit (`OrderVault.t.sol`, `OrderVault.edges.t.sol`, `PriceMath.t.sol`, handler checks) | 104 |
-| Fuzz (vault and price maths, 256 runs each) | 12 |
+| Unit (`OrderVault.t.sol`, `.edges`, `.plugins`, `.audit`, `OrderVaultLens.t.sol`, `PriceMath.t.sol`, handler checks) | 125 |
+| Fuzz (vault, lens previews, order types and price maths, 256 runs each) | 18 |
 | Invariant (escrow, solvency, credits, bookkeeping, NFTs, liveness; 256 runs × 500 calls) | 6 |
-| Fork (live testnet) | 3 |
+| Differential (v1.0.1 vault vs this one, same random actions, each vault in its own transaction; 256 runs × 100 calls) | 1 |
+| Gas report (`GasMeasure.t.sol`, v1.0.1 vs this vault per sweep scenario) | 9 |
+| Fork (live testnet; mainnet guard with `MAINNET_FORK=true`) | 4 |
 | Frontend unit / e2e | 34 / 59 (30 specs at two widths; the burger-menu spec only runs at 390), plus one live-testnet spec |
 
-Coverage of `OrderVault.sol`: 99.4% of lines, 96.1% of branches, 100% of functions; the libraries are at 100%. The handful of lines and branches the report marks uncovered are `forge coverage --ir-minimum` instrumentation artifacts — identical `return`/`revert`/`break` statements the IR pipeline merges into one target, plus a branch the fuzz suite exercises — so the code is behaviourally 100% covered; the neighbouring statements' hit counts show every path runs. The e2e suite runs a production build against a mocked relay, mirror node and injected wallet, so it is deterministic and never signs anything.
+Coverage of the contracts: 99.6% of lines, 96.4% of branches, 100% of functions (`OrderVault.sol` 99.5% / 98.9%; the lens, `SweepMath`, `PriceMath`, `MarketGuard` and all three order types at 100%). The few lines and branches the report marks uncovered are `forge coverage --ir-minimum` instrumentation artifacts — identical `return`/`break` statements the IR pipeline merges into one target, and branches inside delegatecalled libraries — each on a path that has its own test, so the code is behaviourally 100% covered. The differential campaign is left out of coverage runs because instrumented code spends different gas and it bounds gas.
+
+The e2e suite runs a production build against a mocked relay, mirror node and injected wallet, so it is deterministic and never signs anything.
 
 ## Troubleshooting
 
@@ -251,13 +269,19 @@ these files.
 
 ```
 packages/foundry/
-  contracts/OrderVault.sol                orders, sweeps, fills, settlement, cost views
+  contracts/OrderVault.sol                orders, sweeps, fills, settlement, the order-type registry
+  contracts/OrderVaultLens.sol            read-only cost, schedule and status previews for the frontend
+  contracts/interfaces/IOrderType.sol     the order-type plug-in interface
+  contracts/ordertypes/                   LimitOrderType, StopOrderType, TrailingStopType
+  contracts/libraries/SweepMath.sol       the cost and scheduling arithmetic (shared by vault and lens)
+  contracts/libraries/Settlement.sol      SaucerSwap swap, HTS token and order-NFT operations, ERC-20 moves
+  contracts/libraries/MarketRegistry.sol  listing and tuning markets, and their bounds
   contracts/libraries/MarketGuard.sol     Chainlink vs TWAP guard and its parameter bounds
   contracts/libraries/OrderCollection.sol creates the order NFT collection
   contracts/libraries/PriceMath.sol       tick maths, cross prices, bps
   script/MarketConfig.sol                 testnet addresses, markets, measured costs
   script/Deploy.s.sol, script/PoolGap.s.sol
-  test/                                   unit, fuzz, edge, invariant, fork
+  test/                                   unit, fuzz, edge, audit, lens, invariant, differential, gas, fork
 packages/nextjs/
   app/                                    Trade (/), My orders (/orders), order detail (/orders/[id]),
                                           Debug Contracts (/debug), and api/ from the scaffold

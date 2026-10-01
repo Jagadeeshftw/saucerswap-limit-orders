@@ -73,7 +73,7 @@ placeOrder ──► Open, funded ──sweep: trigger not met ──► pay sha
 
 ## When checks run
 
-Scheduling a contract call through HSS is a fixed network fee: `ScheduleCreate` with an inner `ContractCall` is $0.0099 + $0.09, plus Hedera's 20% system-contract surcharge. Measured on testnet in isolation:
+Scheduling a contract call through HSS is a fixed network fee of about 1.56 HBAR (≈ $0.12 on 2026-09-29). Hedera sets the `ScheduleCreate` and inner `ContractCall` fees in USD and adds a 20% system-contract surcharge, so the HBAR figure follows the exchange rate. Measured on testnet in isolation:
 
 | Sweep segment | Gas |
 |---|---|
@@ -104,7 +104,7 @@ wait = distance_to_nearest_trigger_bps × 1 h ÷ maxMoveBpsPerHour, clamped to [
 
 ## What it costs
 
-Every figure comes from the vault's views (`checkCost`, `checkCostShared`, `fillCost`, `minBudget`, `nextCheckDelay`), which price gas in USD cents and convert it through `0x168`. At the testnet rate (1 HBAR = 7.7 ¢):
+Every figure comes from `OrderVaultLens` (`checkCost`, `checkCostShared`, `fillCost`, `minBudget`, `nextCheckDelay`), which computes it with `SweepMath`, the same code the vault charges by, pricing gas in USD cents and converting it through `0x168`. At the testnet rate (1 HBAR = 7.7 ¢):
 
 | | HBAR |
 |---|---|
