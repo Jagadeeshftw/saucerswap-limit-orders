@@ -9,123 +9,123 @@
   ],
   "testnetProofs": [
     {
-      "timestamp": "1790771452.123758104",
+      "timestamp": "1790870656.011161104",
       "scheduled": false,
-      "contract": "0xba9c496d229b9868a804c2bcfbeac97e2bad1b1d",
+      "contract": "0xc265045c65d0114109072d60b3a60231427a06a9",
       "event": "OrderPlaced",
       "topic0": "0x94a9ab2daa7366c4b87412378f3606519f7ab5f3a446a76c08d7e4a58a48f4ce",
-      "description": "Order #5 placed through a script: DAI stop-loss escrowed, order NFT minted"
+      "description": "Order #2 placed through a script: DAI stop-loss escrowed, order NFT minted, next check brought forward"
     },
     {
-      "timestamp": "1790771751.009135530",
+      "timestamp": "1790870954.024028208",
       "scheduled": true,
-      "contract": "0xba9c496d229b9868a804c2bcfbeac97e2bad1b1d",
+      "contract": "0xc265045c65d0114109072d60b3a60231427a06a9",
       "event": "OrderFilled",
       "topic0": "0x4eac0bcdf713c4feb523019bdbf1c5035d9fcc44aadb6a69e0777e235082f6eb",
-      "description": "The Schedule Service fills order #5 on SaucerSwap V2, no keeper"
+      "description": "The Schedule Service fills order #2 on SaucerSwap V2, no keeper"
     },
     {
-      "timestamp": "1790772299.588606025",
+      "timestamp": "1790871019.550469104",
       "scheduled": false,
-      "contract": "0xba9c496d229b9868a804c2bcfbeac97e2bad1b1d",
+      "contract": "0xc265045c65d0114109072d60b3a60231427a06a9",
       "event": "OrderPlaced",
       "topic0": "0x94a9ab2daa7366c4b87412378f3606519f7ab5f3a446a76c08d7e4a58a48f4ce",
-      "description": "Order #7 placed through the frontend (browser wallet), 0.1 DAI stop-loss"
+      "description": "Order #3 placed through the frontend (Playwright driving the real UI), 0.1 DAI stop-loss"
     },
     {
-      "timestamp": "1790772599.101466208",
+      "timestamp": "1790871319.125050208",
       "scheduled": true,
-      "contract": "0xba9c496d229b9868a804c2bcfbeac97e2bad1b1d",
+      "contract": "0xc265045c65d0114109072d60b3a60231427a06a9",
       "event": "OrderFilled",
       "topic0": "0x4eac0bcdf713c4feb523019bdbf1c5035d9fcc44aadb6a69e0777e235082f6eb",
-      "description": "Order #7, placed in the UI, filled by the Schedule Service on the next sweep"
+      "description": "Order #3, placed in the UI, filled by the Schedule Service on the next sweep"
     },
     {
-      "timestamp": "1790771751.009135530",
+      "timestamp": "1790870954.024028208",
       "scheduled": true,
-      "contract": "0xba9c496d229b9868a804c2bcfbeac97e2bad1b1d",
+      "contract": "0xc265045c65d0114109072d60b3a60231427a06a9",
       "event": "OrderChecked",
       "topic0": "0x1a7dbf431965c6067a9b8aea714120177a1e0d555a6dd0078b62e17d9ae1847b",
       "minLogs": 2,
-      "description": "One scheduled sweep charges every open order in the market a shared check"
+      "description": "One scheduled sweep charges every open order in the market a shared check (#1 and #2)"
     },
     {
-      "timestamp": "1790771913.055173208",
+      "timestamp": "1790869442.280121132",
+      "scheduled": false,
+      "contract": "0xc265045c65d0114109072d60b3a60231427a06a9",
+      "event": "OrderPlaced",
+      "topic0": "0x94a9ab2daa7366c4b87412378f3606519f7ab5f3a446a76c08d7e4a58a48f4ce",
+      "description": "Trailing stop #1 placed (orderType 2, 0.5% trail on 0.1 DAI) from a testnet burner account"
+    },
+    {
+      "timestamp": "1790870954.024028208",
       "scheduled": true,
-      "contract": "0xba9c496d229b9868a804c2bcfbeac97e2bad1b1d",
+      "contract": "0xc265045c65d0114109072d60b3a60231427a06a9",
+      "event": "OrderStateUpdated",
+      "topic0": "0x5dd40b698b74bd8012621fe84b0c6d41dd12d7b7e4b8b05c45911abd5794fa6c",
+      "description": "The first scheduled check sets trailing stop #1's peak"
+    },
+    {
+      "timestamp": "1790874527.080484104",
+      "scheduled": true,
+      "contract": "0xc265045c65d0114109072d60b3a60231427a06a9",
+      "event": "OrderStateUpdated",
+      "topic0": "0x5dd40b698b74bd8012621fe84b0c6d41dd12d7b7e4b8b05c45911abd5794fa6c",
+      "description": "A later scheduled check raises HBAR trailing stop #7's peak as the price rises; its trigger follows"
+    },
+    {
+      "timestamp": "1790871684.039916208",
+      "scheduled": true,
+      "contract": "0xc265045c65d0114109072d60b3a60231427a06a9",
       "event": "FillHeld",
       "topic0": "0x4da863769c919db72a1edd2c42732b7959df850e7fe9379da40679059d8f5ad9",
-      "description": "Guard holds order #6: HBAR/USDC pool ~18x off Chainlink, fill blocked"
+      "description": "Guard holds order #4: HBAR/USDC pool ~19.6x off Chainlink, fill blocked"
     },
     {
-      "timestamp": "1790772511.027870104",
+      "timestamp": "1790872282.009223208",
       "scheduled": true,
-      "contract": "0xba9c496d229b9868a804c2bcfbeac97e2bad1b1d",
+      "contract": "0xc265045c65d0114109072d60b3a60231427a06a9",
       "event": "FillHeld",
       "topic0": "0x4da863769c919db72a1edd2c42732b7959df850e7fe9379da40679059d8f5ad9",
-      "description": "The guard holds order #6 again, after a doubled back-off wait"
+      "description": "The guard holds order #4 again, after a doubled back-off wait"
     },
     {
-      "timestamp": "1790772562.437845316",
+      "timestamp": "1790872335.349111575",
       "scheduled": false,
-      "contract": "0xba9c496d229b9868a804c2bcfbeac97e2bad1b1d",
+      "contract": "0xc265045c65d0114109072d60b3a60231427a06a9",
       "event": "OrderCancelled",
       "topic0": "0x8cd7e382eb42bcc84841dacd15adda3bdd77aefce75edd49238bd47995b1f968",
-      "description": "Order #6 cancelled by its NFT holder; escrow and unused budget refunded"
+      "description": "Order #4 cancelled by its NFT holder; escrow and unused budget refunded"
     },
     {
-      "timestamp": "1790771572.723588640",
-      "scheduled": false,
-      "contract": "0xba9c496d229b9868a804c2bcfbeac97e2bad1b1d",
-      "event": "OrderCancelled",
-      "topic0": "0x8cd7e382eb42bcc84841dacd15adda3bdd77aefce75edd49238bd47995b1f968",
-      "description": "Order #4 cancelled by the account its NFT was transferred to"
-    },
-    {
-      "timestamp": "1790771563.811651187",
+      "timestamp": "1790871419.739922428",
       "scheduled": false,
       "contract": null,
-      "description": "Order #4's NFT transferred to another account (the order follows its NFT)"
+      "description": "Order #5's NFT transferred to another account (the order follows its NFT)"
     },
     {
-      "timestamp": "1790775946.023710208",
-      "scheduled": true,
-      "contract": "0xba9c496d229b9868a804c2bcfbeac97e2bad1b1d",
-      "event": "BudgetExhausted",
-      "topic0": "0xe3bbed9ba4ea66661cbf21701baf30a52ea330ce76f1be3ca59360048ecb1894",
-      "description": "A scheduled sweep parks order #8 when its budget runs out and schedules nothing further"
-    },
-    {
-      "timestamp": "1790776029.788091104",
+      "timestamp": "1790871432.524922728",
       "scheduled": false,
-      "contract": "0xba9c496d229b9868a804c2bcfbeac97e2bad1b1d",
-      "event": "BudgetToppedUp",
-      "topic0": "0x908e184df46f5e7e1ef7f34f02b3f94a910f9d1e67c2fbdf158b549758370acb",
-      "description": "Top-up refunds a parked order's budget and revives it, so the next scheduled sweep charges it again"
+      "contract": "0xc265045c65d0114109072d60b3a60231427a06a9",
+      "event": "OrderCancelled",
+      "topic0": "0x8cd7e382eb42bcc84841dacd15adda3bdd77aefce75edd49238bd47995b1f968",
+      "description": "Order #5 cancelled by the account its NFT was transferred to"
     },
     {
-      "timestamp": "1790776544.055239569",
+      "timestamp": "1790874158.019936208",
       "scheduled": true,
-      "contract": "0xba9c496d229b9868a804c2bcfbeac97e2bad1b1d",
-      "event": "OrderChecked",
-      "topic0": "0x1a7dbf431965c6067a9b8aea714120177a1e0d555a6dd0078b62e17d9ae1847b",
-      "description": "Checks resume: the restarted sweep charges the revived order again"
-    },
-    {
-      "timestamp": "1790777291.060748804",
-      "scheduled": true,
-      "contract": "0xba9c496d229b9868a804c2bcfbeac97e2bad1b1d",
+      "contract": "0xc265045c65d0114109072d60b3a60231427a06a9",
       "event": "SweepScheduleFailed",
       "topic0": "0x377af519127f551fc264ad444e60aa112009b23be8fbbd9c4e9e44b571521170",
       "description": "E6: a scheduled sweep cannot rebook because a third party saturated HSS capacity; the market stalls"
     },
     {
-      "timestamp": "1790777389.880901398",
+      "timestamp": "1790874210.109869176",
       "scheduled": false,
-      "contract": "0xba9c496d229b9868a804c2bcfbeac97e2bad1b1d",
+      "contract": "0xc265045c65d0114109072d60b3a60231427a06a9",
       "event": "SweepScheduled",
       "topic0": "0x3bafc8a0342d1904e9fc16d0a85040ad804014f5ca02e351a4c038052a50dc99",
-      "description": "E6: a third account calls restartSweep once capacity frees; the sweep chain resumes"
+      "description": "E6: a third account calls restartSweep; the sweep chain resumes"
     }
   ]
 }

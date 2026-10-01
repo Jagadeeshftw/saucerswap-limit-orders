@@ -142,5 +142,6 @@ test("a stop-loss placed in the UI is filled by the Schedule Service", async ({ 
   // Navigate in-app: a full reload would drop this test wallet's connection, which a real wallet remembers.
   await page.getByRole("link", { name: "My orders" }).first().click();
   await expect(page.getByTestId("orders-summary")).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId("order-row").first()).toBeVisible({ timeout: 60_000 });
   await capture(page, "L6-live-my-orders");
 });

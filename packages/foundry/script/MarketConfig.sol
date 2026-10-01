@@ -23,20 +23,23 @@ library MarketConfig {
     address internal constant FEED_USDC_USD = 0xb632a7e7e02d76c0Ce99d9C62c7a2d1B5F92B6B5;
     address internal constant FEED_DAI_USD = 0xdA2aBF7C90aDC73CDF5cA8d720B87bD5F5863389;
 
-    /// @notice Gas per unit of work, calibrated from scheduled sweeps of the reference vault on testnet:
-    ///         a held check with reschedule used ~1,579k gas and a DAI fill without reschedule ~1,029k.
-    ///         852 tinycents per gas is Hedera's USD gas price (~110 tinybar at the testnet rate).
-    ///         scheduleGas is the network's fixed ~$0.12 ScheduleCreate fee: 1,410,346 gas measured in
-    ///         isolation, the same for any gas limit, delay or calldata size.
+    /// @notice Gas per unit of work, calibrated from scheduled sweeps of the v1.0 vault on testnet (a held check
+    ///         with reschedule used ~1,579k gas and a DAI fill without reschedule ~1,029k), plus what the v1.1
+    ///         order-type dispatch adds, measured cold against the v1.0.1 vault by `test/GasMeasure.t.sol`
+    ///         (rounded up): +5k per sweep, +5k per check (the strategy staticcall and the order's type and
+    ///         state reads; a trailing stop's peak writes fall inside the safety margin), +5k per fill and +1k
+    ///         per empty run. 852 tinycents per gas is Hedera's USD gas price (~110 tinybar at the testnet rate).
+    ///         scheduleGas is the network's fixed ScheduleCreate fee (~1.17 HBAR, ≈ $0.12 on 2026-10-01):
+    ///         1,410,346 gas measured in isolation, the same for any gas limit, delay or calldata size.
     function costs() internal pure returns (Costs memory) {
         return Costs({
             scheduleGas: 1_425_000,
-            sweepBaseGas: 95_000,
-            checkGas: 60_000,
-            fillGasHbarIn: 450_000,
-            fillGasTokenIn: 750_000,
+            sweepBaseGas: 100_000,
+            checkGas: 65_000,
+            fillGasHbarIn: 455_000,
+            fillGasTokenIn: 755_000,
             settleGas: 125_000,
-            idleSweepGas: 95_000,
+            idleSweepGas: 96_000,
             gasPriceTinycents: 852,
             safetyBps: 1_000
         });

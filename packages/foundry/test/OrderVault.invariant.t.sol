@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 import { Test, Vm, console2 } from "forge-std/Test.sol";
 import { OrderVault } from "../contracts/OrderVault.sol";
+import { OrderVaultLens } from "../contracts/OrderVaultLens.sol";
 import { PriceMath } from "../contracts/libraries/PriceMath.sol";
 import { Market, Order, PlaceParams, Side, Status, Trigger } from "../contracts/types/OrderTypes.sol";
 import { OrderVaultBase } from "./OrderVaultBase.t.sol";
@@ -14,6 +15,7 @@ contract VaultHandler is Test {
     uint256 internal constant RAY = 1e27;
 
     OrderVault internal immutable vault;
+    OrderVaultLens internal immutable lens;
     MockNftCollection internal immutable nft;
     MockRouter internal immutable router;
     MockToken internal immutable whbar;
@@ -43,6 +45,7 @@ contract VaultHandler is Test {
         address[] memory actors_
     ) {
         vault = vault_;
+        lens = new OrderVaultLens(vault_);
         nft = MockNftCollection(vault_.collection());
         router = router_;
         whbar = tokens[0];
@@ -81,16 +84,17 @@ contract VaultHandler is Test {
         uint256 amount = side == Side.SellBase
             ? bound(amountSeed, daiMarket ? 1e8 : 10e8, daiMarket ? 5_000e8 : 2_000e8)
             : bound(amountSeed, 1e6, 500e6);
-        uint256 budget = vault.minBudget(marketId, side) + bound(extra, 0, 20e8);
+        uint256 budget = lens.minBudget(marketId, side) + bound(extra, 0, 20e8);
         bool hbarIn = !daiMarket && side == Side.SellBase;
         vm.prank(maker);
         try vault.placeOrder{ value: hbarIn ? amount + budget : budget }(
             PlaceParams({
                 marketId: uint32(marketId),
                 side: side,
-                trigger: above ? Trigger.AtOrAbove : Trigger.AtOrBelow,
+                // limit = sell at-or-above / buy at-or-below (type 0); stop = the mirror (type 1)
+                orderType: ((side == Side.SellBase) == above) ? 0 : 1,
                 amountIn: uint128(amount),
-                triggerPrice: uint128(trigger),
+                typeParam: uint128(trigger),
                 slippageBps: daiMarket ? 30 : 100,
                 expiry: uint40(block.timestamp + bound(amountSeed, 1 hours, 7 days))
             })

@@ -1,10 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { budgetFor, checksFor, checksWhileHeld, coverageSeconds, durationText } from "~~/utils/orders/budget";
+import {
+  budgetFor,
+  checksAffordable,
+  checksFor,
+  checksWhileHeld,
+  coverageSeconds,
+  durationText,
+  durationWords,
+  heldSeconds,
+} from "~~/utils/orders/budget";
 
-// Live values of the testnet vault: 1.8977 HBAR per solo check, 0.6906 HBAR reserve, 12.0771 HBAR minimum.
-const SOLO = 189_774_952n;
-const RESERVE = 69_063_669n;
-const MIN = 1_207_713_381n;
+// The v1.1 testnet lens for a DAI sell on 2026-10-01: 1.4261 HBAR per solo check, 0.9373 HBAR reserve, 9.4941 minimum.
+const SOLO = 142_612_906n;
+const RESERVE = 93_729_866n;
+const MIN = 949_407_302n;
 
 describe("checksFor", () => {
   it("counts one check per wait over the lifetime", () => {
@@ -56,5 +65,27 @@ describe("durationText", () => {
   it("rounds to the nearest unit rather than down", () => {
     expect(durationText(7_000)).toBe("2 h");
     expect(durationText(90_000)).toBe("1 d");
+  });
+});
+
+describe("coverage", () => {
+  it("counts the checks a budget pays for after the reserve", () => {
+    expect(checksAffordable(10n, 4n, 2n)).toBe(3);
+    expect(checksAffordable(4n, 4n, 2n)).toBe(0);
+  });
+
+  it("follows the vault's back-off while the guard holds a triggered order", () => {
+    // First check after 5 min, then retries 10, 20 and 40 min apart, capped at 1 h.
+    expect(heldSeconds(0, 300, 3600)).toBe(0);
+    expect(heldSeconds(1, 300, 3600)).toBe(300);
+    expect(heldSeconds(4, 300, 3600)).toBe(300 + 600 + 1200 + 2400);
+    expect(heldSeconds(5, 300, 3600)).toBe(300 + 600 + 1200 + 2400 + 3600);
+  });
+
+  it("words a duration for the coverage line", () => {
+    expect(durationWords(6 * 86_400 + 5_000)).toBe("6 days");
+    expect(durationWords(86_400)).toBe("1 day");
+    expect(durationWords(5 * 3600 + 100)).toBe("5 h");
+    expect(durationWords(30)).toBe("1 min");
   });
 });

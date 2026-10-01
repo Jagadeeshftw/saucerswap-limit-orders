@@ -64,44 +64,54 @@ export const MirrorLagNotice = () => {
   );
 };
 
+// Open is calm (success), Held warns, Filled is the brand colour, Budget empty asks for action; settled is muted.
 const STATUS_CLASS: Record<DisplayStatus, string> = {
-  open: "bg-info/15 text-info",
-  held: "bg-warning/25 text-warning-content dark:text-warning",
-  "budget-empty": "bg-error/15 text-error",
-  filled: "bg-success/20 text-success-content dark:text-success",
+  open: "bg-success/20 text-success-content dark:text-success",
+  held: "bg-warning/30 text-warning-content dark:text-warning",
+  "budget-empty": "bg-error/20 text-error-content dark:text-error",
+  filled: "bg-primary/15 text-primary",
   cancelled: "bg-base-300 text-base-content/70",
   expired: "bg-base-300 text-base-content/70",
 };
 
+/** Longer wording for a chip, shown on hover and read by screen readers. */
+const STATUS_TITLE: Partial<Record<DisplayStatus, string>> = {
+  held: "Held by guard: the trigger is met, but the pool and Chainlink disagree, so the fill waits",
+  "budget-empty": "The budget only covers the fill, so checks are paused until you top it up",
+};
+
 export const StatusBadge = ({ status }: { status: DisplayStatus }) => (
   <span
-    className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap ${STATUS_CLASS[status]}`}
+    className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold whitespace-nowrap ${STATUS_CLASS[status]}`}
+    title={STATUS_TITLE[status]}
+    data-testid="status-chip"
   >
     {STATUS_LABEL[status]}
   </span>
 );
 
 const TONE_CLASS = {
-  ok: "bg-success/15 border-success/50",
-  warn: "bg-warning/20 border-warning/60",
-  error: "bg-error/10 border-error/60",
+  ok: "bg-success/15 border-success/50 text-success-content dark:text-success",
+  warn: "bg-warning/20 border-warning/60 text-warning-content dark:text-warning",
+  error: "bg-error/10 border-error/60 text-error-content dark:text-error",
 };
 
-export const GuardBanner = ({ state }: { state: GuardState }) => {
+const DOT_CLASS = { ok: "bg-success", warn: "bg-warning", error: "bg-error" };
+
+/** The guard verdict first, in colour and words; `facts` is the live reading behind it. */
+export const GuardBanner = ({ state, facts }: { state: GuardState; facts?: string }) => {
   const copy = GUARD_COPY[state];
   return (
     <div
       className={`flex items-start gap-3 rounded-xl border px-4 py-3 ${TONE_CLASS[copy.tone]}`}
       data-testid="guard-banner"
     >
-      <span
-        className={`rounded-full border px-2.5 py-0.5 text-xs font-bold whitespace-nowrap ${
-          copy.tone === "ok" ? "border-success text-success-content dark:text-success" : "border-error text-error"
-        }`}
-      >
-        {copy.label}
-      </span>
-      <p className="m-0 text-sm leading-relaxed">{copy.detail}</p>
+      <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${DOT_CLASS[copy.tone]}`} aria-hidden />
+      <div className="grid gap-0.5">
+        <b className="text-sm font-bold">{copy.label}</b>
+        {facts && <span className="text-xs font-semibold opacity-90">{facts}</span>}
+        <p className="m-0 text-sm leading-relaxed text-base-content/80">{copy.detail}</p>
+      </div>
     </div>
   );
 };

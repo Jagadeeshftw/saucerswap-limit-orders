@@ -13,9 +13,9 @@ import { vault } from "~~/hooks/orders/useVault";
 import { useVaultTx } from "~~/hooks/orders/useVaultTx";
 import { durationText } from "~~/utils/orders/budget";
 import { GAS_LIMIT } from "~~/utils/orders/gas";
-import { comparatorText, describeOrder, isOpen } from "~~/utils/orders/orders";
+import { OrderType, describeOrder, fireCondition, isOpen, peakOf, trailingTrigger } from "~~/utils/orders/orders";
 import type { TrailEntry } from "~~/utils/orders/trail";
-import { formatAmount, formatHbar, formatPrice, parseAmount, tinybarToWeibar } from "~~/utils/orders/units";
+import { formatAmount, formatBps, formatHbar, formatPrice, parseAmount, tinybarToWeibar } from "~~/utils/orders/units";
 
 const hashscan = (path: string) => `https://hashscan.io/testnet/${path}`;
 const shortAddress = (address: string) => `${address.slice(0, 6)}…${address.slice(-4)}`;
@@ -27,11 +27,12 @@ const DATE_FORMAT: Intl.DateTimeFormatOptions = {
   minute: "2-digit",
 };
 
+// Timeline markers: filled for what happened to the order, hollow for routine checks.
 const MARKER: Record<TrailEntry["tone"], string> = {
-  neutral: "border-base-content/40",
+  neutral: "border-base-content/40 bg-base-100",
   ok: "border-success bg-success",
-  warn: "border-warning",
-  error: "border-error",
+  warn: "border-warning bg-warning",
+  error: "border-error bg-error",
   primary: "border-primary bg-primary",
 };
 
@@ -70,6 +71,9 @@ const OrderDetail = () => {
 
   const { input, output } = legs(order.market, order.side);
   const open = isOpen(order.display);
+  const trailing = order.orderType === OrderType.Trailing;
+  const peak = peakOf(order);
+  const quote = (price: bigint) => `${formatPrice(price)} ${order.market.quote.symbol}`;
   const isHolder = Boolean(holder && address && holder.toLowerCase() === address.toLowerCase());
   const topUp = parseAmount(topUpText, 8);
   const write = (functionName: "cancel" | "executeOrder" | "topUp", value?: bigint) =>
@@ -90,27 +94,33 @@ const OrderDetail = () => {
           <h1 className="m-0 text-2xl font-bold">Order #{order.id.toString()}</h1>
           <StatusBadge status={order.display} />
         </div>
-        <p className="m-0 text-sm text-base-content/70">
+        <p className="m-0 text-sm text-base-content/70" data-testid="order-summary-line">
           {describeOrder(
             order.side,
-            order.trigger,
+            order.orderType,
             formatAmount(order.amountIn, input.decimals),
             order.market.base.symbol,
             order.market.quote.symbol,
           )}{" "}
-          when {order.market.base.symbol} is {comparatorText(order.trigger)} {formatPrice(order.triggerPrice)}{" "}
-          {order.market.quote.symbol}
+          {fireCondition(order, order.market.base.symbol, order.market.quote.symbol)}
         </p>
       </div>
       <MirrorLagNotice />
       {open && <SweepStatusBanner marketId={order.market.id} />}
 
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
-        <section className="grid gap-2 rounded-2xl border border-base-300 bg-base-100 p-5" aria-label="Order trail">
+        <section
+          className="grid gap-3 rounded-2xl border border-base-300 bg-base-100 p-4 sm:p-5"
+          aria-label="Order trail"
+        >
           <h2 className="m-0 text-xs font-semibold tracking-wide text-base-content/70 uppercase">
             Trail from the mirror node
           </h2>
-          {trail.error && <p className="m-0 text-sm text-error">Could not load the trail: {trail.error.message}</p>}
+          {trail.error && (
+            <p className="m-0 text-sm text-error-content dark:text-error">
+              Could not load the trail: {trail.error.message}
+            </p>
+          )}
           {trail.isLoading && <p className="m-0 text-sm text-base-content/70">Loading events…</p>}
           {trail.data?.length === 0 && (
             <p className="m-0 text-sm text-base-content/70" data-testid="trail-empty">
@@ -119,17 +129,17 @@ const OrderDetail = () => {
             </p>
           )}
           <ol className="m-0 grid list-none p-0" data-testid="trail">
-            {trail.data?.map(entry => (
-              <li
-                key={entry.key}
-                className="grid grid-cols-[1rem_minmax(0,1fr)_auto] gap-3 border-b border-base-300 py-3 last:border-b-0"
-              >
-                <span className={`mt-1 h-3 w-3 rounded-full border-2 ${MARKER[entry.tone]}`} aria-hidden />
-                <span className="grid gap-0.5">
+            {trail.data?.map((entry, i) => (
+              <li key={entry.key} className="grid grid-cols-[1.25rem_minmax(0,1fr)_auto] gap-x-3">
+                <span className="relative flex justify-center" aria-hidden>
+                  {i < trail.data!.length - 1 && <span className="absolute top-4 bottom-0 w-0.5 bg-base-300" />}
+                  <span className={`relative mt-1.5 h-3 w-3 rounded-full border-2 ${MARKER[entry.tone]}`} />
+                </span>
+                <span className="grid gap-0.5 pb-4">
                   <b className="text-sm font-semibold">{entry.title}</b>
                   <span className="text-sm text-base-content/70 [overflow-wrap:anywhere]">{entry.detail}</span>
                 </span>
-                <span className="text-right text-xs text-base-content/70 tabular-nums">
+                <span className="pb-4 text-right text-xs text-base-content/70 tabular-nums">
                   {entry.at.toLocaleString("en-GB", {
                     day: "numeric",
                     month: "short",
@@ -138,12 +148,12 @@ const OrderDetail = () => {
                   })}
                   <br />
                   <a
-                    className="link link-primary"
+                    className="link link-primary font-semibold no-underline"
                     href={hashscan(`transaction/${entry.timestamp}`)}
                     target="_blank"
                     rel="noreferrer"
                   >
-                    HashScan
+                    HashScan ↗
                   </a>
                 </span>
               </li>
@@ -155,7 +165,7 @@ const OrderDetail = () => {
           </p>
         </section>
 
-        <aside className="grid gap-4 rounded-2xl border border-base-300 bg-base-100 p-5">
+        <aside className="grid gap-4 rounded-2xl border border-base-300 bg-base-100 p-4 sm:p-5">
           <h2 className="m-0 text-xs font-semibold tracking-wide text-base-content/70 uppercase">Summary</h2>
           <dl className="m-0 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
             <Row label="Escrowed">
@@ -164,6 +174,26 @@ const OrderDetail = () => {
               </span>
             </Row>
             <Row label="Receives">{output.symbol}</Row>
+            {trailing && (
+              <>
+                <Row label="Trail">{formatBps(order.typeParam)} below the peak</Row>
+                <Row label="Peak">
+                  <span className="font-mono" data-testid="trail-peak">
+                    {peak > 0n ? quote(peak) : "set at the first check"}
+                  </span>
+                </Row>
+                <Row label="Trigger now">
+                  <span className="font-mono" data-testid="trail-trigger">
+                    {peak > 0n ? quote(trailingTrigger(peak, order.typeParam)) : "–"}
+                  </span>
+                </Row>
+                {order.price > 0n && (
+                  <Row label="Chainlink now">
+                    <span className="font-mono">{quote(order.price)}</span>
+                  </Row>
+                )}
+              </>
+            )}
             <Row label="Max slippage">{order.slippageBps / 100}%</Row>
             <Row label={open ? "Budget left" : "Budget"}>
               {open ? <span className="font-mono">{formatHbar(order.budget)}</span> : "unused part refunded"}
@@ -189,7 +219,7 @@ const OrderDetail = () => {
                   target="_blank"
                   rel="noreferrer"
                 >
-                  {holderAccountId ?? shortAddress(holder)}
+                  <span className="font-mono">{holderAccountId ?? shortAddress(holder)}</span>
                 </a>
                 {holderAccountId && (
                   <span className="block font-mono text-xs text-base-content/70">{shortAddress(holder)}</span>
@@ -204,7 +234,9 @@ const OrderDetail = () => {
                   target="_blank"
                   rel="noreferrer"
                 >
-                  {collectionId} #{order.id.toString()}
+                  <span className="font-mono">
+                    {collectionId} #{order.id.toString()}
+                  </span>
                 </a>
               </Row>
             )}
@@ -215,7 +247,7 @@ const OrderDetail = () => {
                 target="_blank"
                 rel="noreferrer"
               >
-                {vaultId ?? shortAddress(vault.address)}
+                <span className="font-mono">{vaultId ?? shortAddress(vault.address)}</span>
               </a>
             </Row>
           </dl>
@@ -223,7 +255,7 @@ const OrderDetail = () => {
           {open && (
             <div className="grid gap-3 border-t border-base-300 pt-4" data-testid="order-actions">
               {order.display === "budget-empty" && (
-                <p className="m-0 text-sm text-error">
+                <p className="m-0 text-sm text-error-content dark:text-error">
                   Checks are paused because the budget only covers the fill. Top up to resume them.
                 </p>
               )}

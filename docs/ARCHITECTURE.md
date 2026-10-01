@@ -73,7 +73,7 @@ placeOrder ──► Open, funded ──sweep: trigger not met ──► pay sha
 
 ## When checks run
 
-Scheduling a contract call through HSS is a fixed network fee: `ScheduleCreate` with an inner `ContractCall` is $0.0099 + $0.09, plus Hedera's 20% system-contract surcharge. Measured on testnet in isolation:
+Scheduling a contract call through HSS is a fixed network fee of about 1.17 HBAR (≈ $0.12 on 2026-10-01). Hedera sets the `ScheduleCreate` and inner `ContractCall` fees in USD and adds a 20% system-contract surcharge, so the HBAR figure follows the exchange rate. Measured on testnet in isolation:
 
 | Sweep segment | Gas |
 |---|---|
@@ -104,24 +104,24 @@ wait = distance_to_nearest_trigger_bps × 1 h ÷ maxMoveBpsPerHour, clamped to [
 
 ## What it costs
 
-Every figure comes from the vault's views (`checkCost`, `checkCostShared`, `fillCost`, `minBudget`, `nextCheckDelay`), which price gas in USD cents and convert it through `0x168`. At the testnet rate (1 HBAR = 7.7 ¢):
+Every figure comes from `OrderVaultLens` (`checkCost`, `checkCostShared`, `fillCost`, `minBudget`, `nextCheckDelay`), which computes it with `SweepMath`, the same code the vault charges by, pricing gas in USD cents and converting it through `0x168`. Read on 2026-10-01 at the testnet rate (1 HBAR = 10.4 ¢); `node scripts/cost-figures.mjs` prints today's:
 
 | | HBAR |
 |---|---|
-| One check, order alone in its market (1,580,000 gas + 10% margin) | 1.8977 |
-| One check, shared by 2 / 5 / 20 funded orders | 0.9849 / 0.4372 / 0.1634 |
-| Reserve an order always keeps (fill + its part of a final sweep), HBAR sell / token sell | 0.8768 / 1.2371 |
-| Minimum budget at placement (reserve + 6 solo checks), HBAR sell / token sell | 12.2633 / 12.6236 |
+| One check, order alone in its market (1,590,000 gas + 10% margin) | 1.4363 |
+| One check, shared by 2 / 5 / 20 funded orders | 0.7475 / 0.3342 / 0.1276 |
+| Reserve an order always keeps (fill + its part of a final sweep), HBAR sell / token sell | 0.6730 / 0.9440 |
+| Minimum budget at placement (reserve + 6 solo checks), HBAR sell / token sell | 9.2905 / 9.5615 |
 
 What a market costs per day, alone, before and after distance-aware scheduling:
 
 | Situation | Before (every 5 min) | After |
 |---|---|---|
-| HBAR limit 5% away (checked every 2 h) | 546.5 | 22.8 |
-| HBAR limit 10% away (every 4 h) | 546.5 | 11.4 |
-| Any trigger 15%+ away, or a long guard hold (every 6 h) | 546.5 | 7.6 |
-| DAI stop 50 bps away (every 2 h) | 546.5 | 22.8 |
-| Trigger within 0.2% on HBAR or 0.02% on DAI (every 5 min) | 546.5 | 546.5 |
+| HBAR limit 5% away (checked every 2 h) | 413.6 | 17.2 |
+| HBAR limit 10% away (every 4 h) | 413.6 | 8.6 |
+| Any trigger 15%+ away, or a long guard hold (every 6 h) | 413.6 | 5.7 |
+| DAI stop or trailing stop 50 bps away (every 2 h) | 413.6 | 17.2 |
+| Trigger within 0.2% on HBAR or 0.02% on DAI (every 5 min) | 413.6 | 413.6 |
 
 The ticket sizes the budget to cover the order's whole lifetime at today's distance, then shows the cost next to each expiry option. Orders sharing a market split the fixed part, so each pays less.
 

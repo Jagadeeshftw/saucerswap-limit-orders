@@ -8,12 +8,18 @@ import { IHederaTokenService } from "../interfaces/IHederaTokenService.sol";
 /// @dev An external library, linked rather than inlined, so this one-time setup doesn't count against
 ///      OrderVault's 24 KiB limit. It runs by DELEGATECALL, so the vault is the caller HTS sees.
 library OrderCollection {
+    /// @dev The HTS system contract.
     IHederaTokenService internal constant HTS = IHederaTokenService(address(0x167));
+    /// @dev HTS response code for success.
     int64 internal constant HTS_SUCCESS = 22;
+    /// @dev HTS key-type bits for the supply (16) and wipe (8) keys.
     uint256 internal constant KEYS_SUPPLY_AND_WIPE = 16 | 8;
+    /// @dev The collection's auto-renew period, in seconds (90 days).
     int64 internal constant AUTO_RENEW_PERIOD = 7_776_000;
 
     /// @notice Create the collection with the vault as treasury and holder of the supply and wipe keys.
+    /// @param name Collection name.
+    /// @param symbol Collection symbol.
     /// @param fee HBAR (tinybar) forwarded as the HTS creation fee; any excess stays in the vault.
     /// @return rc The HTS response code.
     /// @return collection The new token's address, or zero on failure.

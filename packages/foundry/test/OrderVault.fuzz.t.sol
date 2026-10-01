@@ -6,6 +6,7 @@ import { OrderVault } from "../contracts/OrderVault.sol";
 import { PriceMath } from "../contracts/libraries/PriceMath.sol";
 import { Order, PlaceParams, Side, Status, Trigger } from "../contracts/types/OrderTypes.sol";
 import { OrderVaultBase } from "./OrderVaultBase.t.sol";
+import { MarketConfig } from "../script/MarketConfig.sol";
 
 /// @notice Property tests over amounts, decimals, budgets, triggers and execution prices.
 contract OrderVaultFuzzTest is OrderVaultBase {
@@ -122,7 +123,7 @@ contract OrderVaultFuzzTest is OrderVaultBase {
         vm.prank(bob);
         vault.topUp{ value: amount }(orderId);
 
-        bool affordable = budget >= vault.fillCost(HBAR_MARKET, Side.SellBase) + vault.checkCost(HBAR_MARKET);
+        bool affordable = budget >= lens.fillCost(HBAR_MARKET, Side.SellBase) + lens.checkCost(HBAR_MARKET);
         assertEq(vault.getOrder(orderId).funded, affordable);
         assertEq(hss.count(), affordable ? schedules + 1 : schedules, "checks resume only for a funded order");
         assertEq(vault.getOrder(orderId).budget, budget);
@@ -145,17 +146,17 @@ contract OrderVaultFuzzTest is OrderVaultBase {
         uint256 surplusBefore = _spare();
         _runScheduledSweep(HBAR_MARKET);
 
-        uint256 share = vault.checkCostShared(n);
+        uint256 share = lens.checkCostShared(n);
         for (uint256 i; i < n; ++i) {
             Order memory o = vault.getOrder(ids[i]);
             assertEq(before[i] - o.budget, share, "every order pays the same share");
-            assertGe(o.budget, vault.fillCost(HBAR_MARKET, Side.SellBase), "the reserve is untouched");
+            assertGe(o.budget, lens.fillCost(HBAR_MARKET, Side.SellBase), "the reserve is untouched");
         }
         assertEq(_spare() - surplusBefore, n * share, "the vault keeps exactly what it charged");
         // Each share rounds its slice of the fixed gas up by at most one gas.
         assertLe(
             share * n,
-            vault.checkCost(HBAR_MARKET) + (n - 1) * _tinybar(60_000) + n * (_tinybar(1) + 1),
+            lens.checkCost(HBAR_MARKET) + (n - 1) * _tinybar(MarketConfig.costs().checkGas) + n * (_tinybar(1) + 1),
             "sharing never costs more than one sweep"
         );
     }
@@ -216,9 +217,9 @@ contract OrderVaultFuzzTest is OrderVaultBase {
             near = bound(a, price / 10, price);
             far = bound(b, price / 10, near);
         }
-        Trigger t = above ? Trigger.AtOrAbove : Trigger.AtOrBelow;
-        uint256 dNear = vault.nextCheckDelay(HBAR_MARKET, t, near, expiry);
-        uint256 dFar = vault.nextCheckDelay(HBAR_MARKET, t, far, expiry);
+        uint8 ot = above ? LIMIT : STOP; // for a sell: at-or-above is a limit, at-or-below is a stop
+        uint256 dNear = lens.nextCheckDelay(HBAR_MARKET, ot, Side.SellBase, uint128(near), expiry);
+        uint256 dFar = lens.nextCheckDelay(HBAR_MARKET, ot, Side.SellBase, uint128(far), expiry);
         assertLe(dNear, dFar, "a farther trigger never waits less");
         assertGe(dNear, 300);
         assertLe(dFar, 6 hours);
@@ -241,7 +242,7 @@ contract OrderVaultFuzzTest is OrderVaultBase {
         c.trigger = above ? Trigger.AtOrAbove : Trigger.AtOrBelow;
         if (buy) c.amount = bound(amountSeed, 1, 500_000e6);
         else c.amount = bound(amountSeed, 1, dai ? 500_000e8 : 50_000e8);
-        c.budget = vault.minBudget(c.marketId, c.side) + bound(extra, 0, 1_000e8);
+        c.budget = lens.minBudget(c.marketId, c.side) + bound(extra, 0, 1_000e8);
         uint256 price = vault.guardReading(c.marketId).oraclePrice;
         c.triggerPrice = bound(triggerSeed, price / 2, price * 2);
         c.slippage = dai ? 30 : 100;
@@ -255,9 +256,9 @@ contract OrderVaultFuzzTest is OrderVaultBase {
             PlaceParams({
                 marketId: uint32(c.marketId),
                 side: c.side,
-                trigger: c.trigger,
+                orderType: _typeFor(c.side, c.trigger),
                 amountIn: uint128(c.amount),
-                triggerPrice: uint128(c.triggerPrice),
+                typeParam: uint128(c.triggerPrice),
                 slippageBps: c.slippage,
                 expiry: uint40(block.timestamp + c.lifetime)
             })

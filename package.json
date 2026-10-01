@@ -9,6 +9,7 @@
     ]
   },
   "scripts": {
+    "contracts:api": "node scripts/gen-contract-api.mjs",
     "format": "yarn next:format && yarn foundry:format",
     "foundry:account": "yarn workspace @sh/foundry account",
     "foundry:account:generate": "yarn workspace @sh/foundry account:generate",
@@ -43,7 +44,8 @@
     "next:test": "yarn workspace @sh/nextjs test",
     "next:test:e2e": "yarn workspace @sh/nextjs test:e2e",
     "postinstall": "husky",
-    "precommit": "lint-staged"
+    "precommit": "lint-staged",
+    "foundry:fork-guard": "yarn workspace @sh/foundry fork-guard"
   },
   "packageManager": "yarn@3.2.3",
   "devDependencies": {

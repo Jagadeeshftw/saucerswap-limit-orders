@@ -7,6 +7,8 @@ import { MarketGuard } from "../contracts/libraries/MarketGuard.sol";
 import {
     Costs,
     GuardParams,
+    HtsError,
+    HtsOperation,
     Market,
     Order,
     PlaceParams,
@@ -33,16 +35,16 @@ contract OrderVaultEdgeTest is OrderVaultBase {
 
     function test_nextCheckDelay_followsDistanceWithinBounds() public {
         uint256 expiry = block.timestamp + 7 days;
-        assertEq(vault.nextCheckDelay(HBAR_MARKET, Trigger.AtOrAbove, FAR, expiry), FAR_DELAY);
-        assertEq(vault.nextCheckDelay(HBAR_MARKET, Trigger.AtOrAbove, NEAR, expiry), 1_800);
-        assertEq(vault.nextCheckDelay(HBAR_MARKET, Trigger.AtOrAbove, 20_000_000, expiry), 6 hours, "capped");
-        assertEq(vault.nextCheckDelay(HBAR_MARKET, Trigger.AtOrAbove, 11_170_000, expiry), 300, "floored");
-        assertEq(vault.nextCheckDelay(HBAR_MARKET, Trigger.AtOrAbove, 10_000_000, expiry), 300, "already met");
-        assertEq(vault.nextCheckDelay(HBAR_MARKET, Trigger.AtOrBelow, 10_000_000, expiry), 14_961, "stop 10.4% down");
-        assertEq(vault.nextCheckDelay(HBAR_MARKET, Trigger.AtOrAbove, FAR, block.timestamp + 1_000), 1_000, "expiry");
-        assertEq(vault.nextCheckDelay(HBAR_MARKET, Trigger.AtOrAbove, FAR, block.timestamp + 100), 300);
+        assertEq(lens.nextCheckDelay(HBAR_MARKET, LIMIT, Side.SellBase, FAR, expiry), FAR_DELAY);
+        assertEq(lens.nextCheckDelay(HBAR_MARKET, LIMIT, Side.SellBase, NEAR, expiry), 1_800);
+        assertEq(lens.nextCheckDelay(HBAR_MARKET, LIMIT, Side.SellBase, 20_000_000, expiry), 6 hours, "capped");
+        assertEq(lens.nextCheckDelay(HBAR_MARKET, LIMIT, Side.SellBase, 11_170_000, expiry), 300, "floored");
+        assertEq(lens.nextCheckDelay(HBAR_MARKET, LIMIT, Side.SellBase, 10_000_000, expiry), 300, "already met");
+        assertEq(lens.nextCheckDelay(HBAR_MARKET, STOP, Side.SellBase, 10_000_000, expiry), 14_961, "stop 10.4% down");
+        assertEq(lens.nextCheckDelay(HBAR_MARKET, LIMIT, Side.SellBase, FAR, block.timestamp + 1_000), 1_000, "expiry");
+        assertEq(lens.nextCheckDelay(HBAR_MARKET, LIMIT, Side.SellBase, FAR, block.timestamp + 100), 300);
         hbarFeed.set(0, block.timestamp);
-        assertEq(vault.nextCheckDelay(HBAR_MARKET, Trigger.AtOrAbove, FAR, expiry), 300, "no price: check soon");
+        assertEq(lens.nextCheckDelay(HBAR_MARKET, LIMIT, Side.SellBase, FAR, expiry), 300, "no price: check soon");
     }
 
     function test_placeOrder_nearTriggerSupersedesPendingSweep() public {
@@ -58,7 +60,7 @@ contract OrderVaultEdgeTest is OrderVaultBase {
         assertEq(_epoch(HBAR_MARKET), 2);
         assertEq(
             vault.getOrder(near).budget,
-            vault.minBudget(HBAR_MARKET, Side.SellBase) - _idleSweep(),
+            lens.minBudget(HBAR_MARKET, Side.SellBase) - _idleSweep(),
             "the order that brought the sweep forward pays for the superseded run"
         );
 
@@ -136,7 +138,7 @@ contract OrderVaultEdgeTest is OrderVaultBase {
         // The first order expires at the first sweep; the third doesn't fit in that sweep's batch of two.
         PlaceParams memory soon = _sellParams(FAR);
         soon.expiry = uint40(block.timestamp + 600);
-        uint256 budget = vault.minBudget(HBAR_MARKET, Side.SellBase);
+        uint256 budget = lens.minBudget(HBAR_MARKET, Side.SellBase);
         vm.prank(alice);
         uint256 expiring = vault.placeOrder{ value: 250e8 + budget }(soon);
         _sellHbar(alice, FAR, Trigger.AtOrAbove);
@@ -163,33 +165,33 @@ contract OrderVaultEdgeTest is OrderVaultBase {
         uint256 perOrder = uint256(c.checkGas) + c.settleGas;
         uint256 perFill = uint256(c.fillGasTokenIn) + c.settleGas;
         uint256 finish = uint256(c.scheduleGas) + c.sweepBaseGas;
-        assertEq(vault.sweepGasLimit(DAI_MARKET), finish + perOrder + perFill, "an empty book is sized for one");
+        assertEq(lens.sweepGasLimit(DAI_MARKET), finish + perOrder + perFill, "an empty book is sized for one");
         for (uint256 i; i < 4; ++i) {
             _sellHbar(alice, FAR, Trigger.AtOrAbove);
         }
-        assertEq(vault.sweepGasLimit(HBAR_MARKET), finish + 4 * perOrder + 3 * perFill, "fills cap at maxFills");
+        assertEq(lens.sweepGasLimit(HBAR_MARKET), finish + 4 * perOrder + 3 * perFill, "fills cap at maxFills");
     }
 
     // ------------------------------------------------------------------ stalled sweeps
 
     function test_sweepStatus_reportsIdleScheduledAndStalled() public {
-        (SweepStatus status, uint256 at) = vault.sweepStatus(HBAR_MARKET);
+        (SweepStatus status, uint256 at) = lens.sweepStatus(HBAR_MARKET);
         assertEq(uint8(status), uint8(SweepStatus.Idle));
         assertEq(at, 0);
 
         _sellHbar(alice, FAR, Trigger.AtOrAbove);
-        (status, at) = vault.sweepStatus(HBAR_MARKET);
+        (status, at) = lens.sweepStatus(HBAR_MARKET);
         assertEq(uint8(status), uint8(SweepStatus.Scheduled));
         assertEq(at, hss.last().expiry);
 
         vm.warp(at + 121); // HSS never ran it, e.g. the vault could not pay
-        (status,) = vault.sweepStatus(HBAR_MARKET);
+        (status,) = lens.sweepStatus(HBAR_MARKET);
         assertEq(uint8(status), uint8(SweepStatus.Stalled));
 
         address stranger = makeAddr("stranger");
         vm.prank(stranger);
         vault.restartSweep(HBAR_MARKET);
-        (status, at) = vault.sweepStatus(HBAR_MARKET);
+        (status, at) = lens.sweepStatus(HBAR_MARKET);
         assertEq(uint8(status), uint8(SweepStatus.Scheduled));
         assertEq(at, block.timestamp + 300);
     }
@@ -211,7 +213,7 @@ contract OrderVaultEdgeTest is OrderVaultBase {
         uint256 bigBefore = vault.getOrder(big).budget;
         _runScheduledSweep(HBAR_MARKET);
         assertEq(vault.getOrder(small).budget, parked, "a parked order is skipped");
-        assertEq(bigBefore - vault.getOrder(big).budget, vault.checkCost(HBAR_MARKET), "the payer carries the sweep");
+        assertEq(bigBefore - vault.getOrder(big).budget, lens.checkCost(HBAR_MARKET), "the payer carries the sweep");
     }
 
     function test_lastOrderLeaving_payingAllOfItsIdleCostLeavesNoRefund() public {
@@ -290,7 +292,7 @@ contract OrderVaultEdgeTest is OrderVaultBase {
     function test_listMarket_revertsWhenAssociationFails() public {
         hts.forceAssociateCode(15);
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(OrderVault.HtsError.selector, OrderVault.HtsOperation.Associate, 15));
+        vm.expectRevert(abi.encodeWithSelector(HtsError.selector, HtsOperation.Associate, 15));
         vault.listMarket(_daiMarket());
     }
 
@@ -312,27 +314,27 @@ contract OrderVaultEdgeTest is OrderVaultBase {
     function test_costViews_revertWhenExchangeRateIsDown() public {
         vm.etch(address(0x168), hex"fe");
         vm.expectRevert(OrderVault.InvalidCosts.selector);
-        vault.checkCost(HBAR_MARKET);
+        lens.checkCost(HBAR_MARKET);
         vm.etch(address(0x168), address(new MockExchangeRate()).code);
-        assertGt(vault.checkCost(HBAR_MARKET), 0);
+        assertGt(lens.checkCost(HBAR_MARKET), 0);
     }
 
     // ------------------------------------------------------------------ failure paths
 
     function test_placeOrder_revertsWhenMintFails() public {
         hts.forceMintCode(21);
-        uint256 budget = vault.minBudget(HBAR_MARKET, Side.SellBase);
+        uint256 budget = lens.minBudget(HBAR_MARKET, Side.SellBase);
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(OrderVault.HtsError.selector, OrderVault.HtsOperation.Mint, 21));
+        vm.expectRevert(abi.encodeWithSelector(HtsError.selector, HtsOperation.Mint, 21));
         vault.placeOrder{ value: 250e8 + budget }(_sellParams(FAR));
     }
 
     function test_placeOrder_revertsWhenTokenPullReturnsFalse() public {
         usdc.setRefuses(true);
-        uint256 budget = vault.minBudget(HBAR_MARKET, Side.BuyBase);
+        uint256 budget = lens.minBudget(HBAR_MARKET, Side.BuyBase);
         PlaceParams memory p = _sellParams(10_000_000);
         p.side = Side.BuyBase;
-        p.trigger = Trigger.AtOrBelow;
+        p.orderType = LIMIT;
         p.amountIn = 50e6;
         vm.prank(alice);
         vm.expectRevert(OrderVault.TransferFailed.selector);
@@ -405,8 +407,8 @@ contract OrderVaultEdgeTest is OrderVaultBase {
     function test_withdrawSurplus_revertsWhenRecipientRejects() public {
         _sellHbar(alice, FAR, Trigger.AtOrAbove);
         _runScheduledSweep(HBAR_MARKET); // the check fee becomes surplus once the vault has paid it
-        vm.deal(address(vault), address(vault).balance + vault.payerFloat()); // cover the float so the fee is withdrawable
-        assertGt(vault.surplus(), 0);
+        vm.deal(address(vault), address(vault).balance + lens.payerFloat()); // cover the float so the fee is withdrawable
+        assertGt(lens.surplus(), 0);
         HbarRejecter rejecter = new HbarRejecter();
         vm.prank(owner);
         vm.expectRevert(OrderVault.TransferFailed.selector);
@@ -427,16 +429,16 @@ contract OrderVaultEdgeTest is OrderVaultBase {
         return PlaceParams({
             marketId: uint32(HBAR_MARKET),
             side: Side.SellBase,
-            trigger: Trigger.AtOrAbove,
+            orderType: LIMIT,
             amountIn: 250e8,
-            triggerPrice: trigger,
+            typeParam: trigger,
             slippageBps: 50,
             expiry: uint40(block.timestamp + 7 days)
         });
     }
 
     function _placeSellHbar(address maker, uint128 trigger, uint256 extraBudget) internal returns (uint256) {
-        uint256 budget = vault.minBudget(HBAR_MARKET, Side.SellBase) + extraBudget;
+        uint256 budget = lens.minBudget(HBAR_MARKET, Side.SellBase) + extraBudget;
         vm.prank(maker);
         return vault.placeOrder{ value: 250e8 + budget }(_sellParams(trigger));
     }

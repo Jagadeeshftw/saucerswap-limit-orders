@@ -21,7 +21,8 @@ export const explainError = (error: unknown): string => {
   const args = (revert?.data?.args ?? []) as readonly unknown[];
   switch (name) {
     case "InsufficientBudget":
-      return `The check budget is too small: send at least ${formatHbar(args[1] as bigint)}.`;
+      // Rounded up, so following the advice always clears the minimum.
+      return `The check budget is too small: send at least ${formatHbar((((args[1] as bigint) + 9_999n) / 10_000n) * 10_000n)}.`;
     case "WrongValue":
       return "The HBAR sent does not cover the order amount. Refresh and try again.";
     case "InvalidSlippage":
@@ -32,6 +33,12 @@ export const explainError = (error: unknown): string => {
       return "Enter an amount greater than zero.";
     case "InvalidTrigger":
       return "Enter a trigger price greater than zero.";
+    case "InvalidOrderParams":
+      return "The order type rejected these settings: check the trigger, or a trail between 0.50% and 50% (trailing stops sell only).";
+    case "OrderTypeInactive":
+      return "This order type is paused for new orders. Existing orders of this type keep running.";
+    case "UnknownOrderType":
+      return "The vault has no order type with this id.";
     case "MarketInactive":
       return "This market is paused for new orders.";
     case "NotHolder":

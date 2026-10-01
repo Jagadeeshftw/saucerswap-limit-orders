@@ -1,8 +1,11 @@
+import deployedContracts from "../contracts/deployedContracts";
 import { mockNetwork } from "./support/mockNetwork";
 import { DAI, type Scenario, baseScenario, withOrderBook } from "./support/scenario";
 import { connectWallet, injectWallet, switchWalletChain } from "./support/wallet";
 import { type Page, type TestInfo, expect, test } from "@playwright/test";
-import { toFunctionSelector } from "viem";
+import { type Abi, decodeFunctionData, toFunctionSelector } from "viem";
+
+const vaultAbi = deployedContracts[296].OrderVault.abi as Abi;
 
 /** With SCREENSHOTS_DIR set, every state is captured in light and dark at the project's width. */
 const capture = async (page: Page, info: TestInfo, state: string) => {
@@ -48,7 +51,11 @@ test.describe("Trade", () => {
     );
     await expect(page.getByTestId("ticket-summary")).toContainText("You receive at least 1,004.95 USDC");
     await expect(page.getByTestId("budget-line")).toContainText("covers the whole 1 day");
-    await expect(page.getByTestId("budget-line")).toContainText("at 1.8977 HBAR each");
+    await expect(page.getByTestId("budget-line")).toContainText("at 1.4261 HBAR each");
+    await expect(page.getByTestId("price-pool")).toContainText("Pool TWAP");
+    await expect(page.getByTestId("price-chainlink")).toContainText("Chainlink");
+    await expect(page.getByTestId("place-order")).toHaveText("Place limit order");
+    await expect(page.locator('label[for="budget"]')).toContainText(/covers ~1 day/);
     await capture(page, info, "02-trade-guard-open");
   });
 
@@ -77,13 +84,16 @@ test.describe("Trade", () => {
   test("uses unambiguous copy on the buy side", async ({ page }, info) => {
     await open(page, baseScenario(), "/");
     await page.getByTestId("side-buy").click();
-    await expect(page.getByTestId("kind-limit")).toHaveText("Limit buy");
+    await expect(page.getByTestId("kind-limit")).toHaveText("Limit");
+    await expect(page.getByTestId("kind-note")).toContainText("Limit buy");
+    await expect(page.getByTestId("kind-trailing")).toBeDisabled();
     await expect(page.getByText("Buy HBAR when price is at or below")).toBeVisible();
     await fillTicket(page, "50", "0.0950");
     await expect(page.getByTestId("ticket-summary")).toContainText("You receive at least 523.6842 HBAR");
     await capture(page, info, "05-trade-limit-buy");
     await page.getByTestId("kind-stop").click();
-    await expect(page.getByTestId("kind-stop")).toHaveText("Stop-buy");
+    await expect(page.getByTestId("kind-note")).toContainText("Stop-buy");
+    await expect(page.getByTestId("place-order")).toHaveText("Place stop-buy");
     await expect(page.getByText("Buy HBAR when price is at or above")).toBeVisible();
     await expect(page.getByTestId("ticket-summary")).toContainText("a stop can fill past it");
     await capture(page, info, "06-trade-stop-buy");
@@ -151,12 +161,12 @@ test.describe("Trade", () => {
 
   test("explains a failed transaction in plain words", async ({ page }, info) => {
     const s = baseScenario();
-    s.send = { kind: "revert", errorName: "InsufficientBudget", args: [1n, 1_226_330_544n] };
+    s.send = { kind: "revert", errorName: "InsufficientBudget", args: [1n, 956_148_323n] };
     await open(page, s, "/");
     await fillTicket(page, "20", "0.1100");
     await page.getByTestId("place-order").click();
     await expect(page.getByTestId("tx-error")).toContainText(
-      "The check budget is too small: send at least 12.2633 HBAR.",
+      "The check budget is too small: send at least 9.5615 HBAR.",
     );
     await capture(page, info, "12-tx-failed");
   });
@@ -165,11 +175,12 @@ test.describe("Trade", () => {
     await open(page, baseScenario(), "/?market=2");
     await fillTicket(page, "1000", "1.0100");
     const expiry = page.locator("#expiry");
-    await expect(expiry.locator("option").nth(2)).toContainText(/7 days · [\d.,]+ HBAR budget/);
+    await expect(expiry.locator("option").nth(2)).toContainText(/7 days · [\d.,]+ HBAR/);
     await expiry.selectOption({ label: await expiry.locator("option").nth(2).innerText() });
     // 1.01 is 102 bps above 0.9998; at 25 bps/h DAI is checked every 4 h, 42 times in 7 days.
     await expect(page.getByTestId("budget-line")).toContainText("covers the whole 7 days");
     await expect(page.getByTestId("budget-line")).toContainText("about every 4 h, so 42 checks");
+    await expect(page.locator('label[for="budget"]')).toContainText("covers ~7 days");
     await capture(page, info, "27-trade-budget-covers-expiry");
   });
 
@@ -178,7 +189,7 @@ test.describe("Trade", () => {
     await page.getByTestId("kind-stop").click();
     await fillTicket(page, "100", "1.0100"); // DAI at 0.9998 is already at or below 1.0100
     await expect(page.getByTestId("budget-line")).toContainText("should fill on the next scheduled check");
-    await expect(page.getByTestId("budget-line")).toContainText("Check budget 12.6236 HBAR");
+    await expect(page.getByTestId("budget-line")).toContainText("Check budget 9.4941 HBAR");
 
     await page.goto("/?market=1");
     await fillTicket(page, "100", "0.1000"); // HBAR at 0.1034 meets it, but the guard is closed
@@ -200,6 +211,58 @@ test.describe("Trade", () => {
     expect(s.sent.at(-1)?.data.startsWith(toFunctionSelector("function restartSweep(uint256)"))).toBe(true);
   });
 
+  test("builds a trailing stop with a trail distance", async ({ page }, info) => {
+    const s = baseScenario();
+    s.tokens[DAI].allowance = 10n ** 20n;
+    await open(page, s, "/?market=2");
+    await page.getByTestId("kind-trailing").click();
+    await page.locator("#amount").fill("0.1");
+    await page.locator("#trail").fill("0.5");
+    await expect(page.getByTestId("trail-hint")).toContainText("Ratchets up as DAI rises, fires on a 0.50% pullback");
+    // DAI at 0.9998 less 0.5%: the trigger starts at 0.9948 and only rises from there.
+    await expect(page.getByTestId("trail-hint")).toContainText("trigger starts at 0.9948 USDC");
+    await expect(page.getByTestId("ticket-summary")).toContainText(
+      "when Chainlink falls 0.50% below the highest price",
+    );
+    await expect(page.locator('label[for="budget"]')).toContainText(/covers ~1 day/);
+    await expect(page.getByTestId("place-order")).toHaveText("Place trailing stop");
+    await capture(page, info, "30-trade-trailing-stop");
+    await page.getByTestId("place-order").click();
+    await expect(page.getByTestId("placed")).toContainText("placed.");
+    const { args } = decodeFunctionData({ abi: vaultAbi, data: s.sent.at(-1)!.data as `0x${string}` });
+    expect(args?.[0]).toMatchObject({ marketId: 2, side: 0, orderType: 2, amountIn: 10_000_000n, typeParam: 50n });
+  });
+
+  test("names the stop ticket after what it does", async ({ page }) => {
+    await open(page, baseScenario(), "/?market=2");
+    await page.getByTestId("kind-stop").click();
+    await expect(page.getByTestId("kind-note")).toContainText("Stop-loss");
+    await expect(page.getByTestId("place-order")).toHaveText("Place stop-loss");
+  });
+
+  test("refuses a check budget below the vault's minimum", async ({ page }, info) => {
+    await open(page, baseScenario(), "/?market=2");
+    await fillTicket(page, "100", "1.0100");
+    await page.locator("#budget").fill("5");
+    const box = page.getByTestId("budget-too-low");
+    await expect(box).toContainText("Budget too low for this order");
+    await expect(box).toContainText("Needs at least 9.4941 HBAR");
+    await expect(page.getByTestId("place-order")).toBeDisabled();
+    await capture(page, info, "31-trade-budget-too-low");
+    await page.getByRole("button", { name: /^Use .* enough for the whole 1 day$/ }).click();
+    await expect(box).toHaveCount(0);
+  });
+
+  test("says how long a smaller budget lasts", async ({ page }) => {
+    await open(page, baseScenario(), "/?market=2");
+    await fillTicket(page, "100", "1.0100");
+    await page.locator("#expiry").selectOption({ index: 2 });
+    // 102 bps away at 25 bps/h: a check about every 4 h. 20 HBAR pays 13 solo checks after the reserve, ~2 days.
+    await page.locator("#budget").fill("20");
+    await expect(page.locator('label[for="budget"]')).toContainText("covers ~2 days");
+    await expect(page.getByTestId("budget-line")).toContainText("covers about 2 days of the 7 days");
+  });
+
   test("places an order and links to it", async ({ page }, info) => {
     const s = baseScenario();
     await open(page, s, "/");
@@ -218,24 +281,33 @@ test.describe("Trade", () => {
 test.describe("My orders", () => {
   test("lists every order newest first with consistent open counts", async ({ page }, info) => {
     await open(page, withOrderBook(baseScenario()), "/orders");
-    await expect(page.getByTestId("orders-summary")).toHaveText("7 orders · 5 open");
-    await expect(page.getByTestId("filter-open")).toHaveText("Open 5");
+    await expect(page.getByTestId("orders-summary")).toHaveText("8 orders · 6 open");
+    await expect(page.getByTestId("filter-open")).toHaveText("Open 6");
     const rows = page.getByTestId(info.project.name === "mobile" ? "order-card" : "order-row");
-    await expect(rows).toHaveCount(7);
-    await expect(rows.first()).toContainText("#14");
-    await expect(rows.nth(1)).toContainText("#13");
-    await expect(rows.nth(1)).toContainText("Held by guard");
-    await expect(rows.nth(3)).toContainText("Budget empty");
-    await expect(rows.nth(5)).toContainText("#5");
+    await expect(rows).toHaveCount(8);
+    await expect(rows.first()).toContainText("#15");
+    await expect(rows.first()).toContainText("Sell · trailing stop");
+    await expect(rows.first()).toContainText("0.50% trail");
+    await expect(rows.first()).toContainText("trigger 0.9950 · peak 1.0001");
+    await expect(rows.nth(1)).toContainText("#14");
+    await expect(rows.nth(2)).toContainText("#13");
+    await expect(rows.nth(2).getByTestId("status-chip")).toHaveText("Held");
+    await expect(rows.nth(2).getByTestId("status-chip")).toHaveAttribute("title", /^Held by guard/);
+    await expect(rows.nth(3)).toContainText("Sell · stop-loss");
+    await expect(rows.nth(3)).toContainText("≤ 0.9950");
+    await expect(rows.nth(4)).toContainText("Budget empty");
+    await expect(rows.nth(6)).toContainText("#5");
+    await expect(rows.nth(6).getByTestId("status-chip")).toHaveText("Filled");
     await expect(rows.last()).toContainText("#3");
     await capture(page, info, "14-my-orders");
     await page.getByTestId("filter-open").click();
-    await expect(rows).toHaveCount(5);
+    await expect(rows).toHaveCount(6);
   });
 
   test("has a designed empty state", async ({ page }, info) => {
     await open(page, baseScenario(), "/orders");
     await expect(page.getByTestId("orders-empty")).toContainText("No orders yet");
+    await expect(page.getByRole("link", { name: "Go to Trade" })).toBeVisible();
     await capture(page, info, "15-my-orders-empty");
   });
 
@@ -284,7 +356,7 @@ test.describe("Order detail", () => {
 
   test("shows a filled order", async ({ page }, info) => {
     await open(page, withOrderBook(baseScenario()), "/orders/5");
-    await expect(page.getByTestId("trail")).toContainText("Filled: 0.5 DAI for 0.5008 USDC");
+    await expect(page.getByTestId("trail")).toContainText("Filled: 0.1 DAI for 0.1001 USDC");
     await expect(page.getByTestId("order-actions")).toHaveCount(0);
     await capture(page, info, "18-order-filled");
   });
@@ -308,6 +380,22 @@ test.describe("Order detail", () => {
     await capture(page, info, "21-order-trail-empty");
   });
 
+  test("shows a trailing stop's peak and the trigger following it", async ({ page }, info) => {
+    await open(page, withOrderBook(baseScenario()), "/orders/15");
+    await expect(page.getByTestId("order-summary-line")).toContainText(
+      "Trailing stop 0.1 DAI with a 0.50% trail: sells when DAI falls 0.50% below the highest price seen at a check",
+    );
+    const trail = page.getByTestId("trail");
+    await expect(trail).toContainText("Peak raised to 1.0001 USDC");
+    await expect(trail).toContainText("Trigger now 0.9950 USDC");
+    await expect(trail).toContainText("Peak set to 0.9999 USDC");
+    await expect(trail).toContainText("Check 3: trigger not met");
+    await expect(trail.getByRole("link", { name: "HashScan ↗" })).toHaveCount(4);
+    await expect(page.getByTestId("trail-peak")).toHaveText("1.0001 USDC");
+    await expect(page.getByTestId("trail-trigger")).toHaveText("0.9950 USDC");
+    await capture(page, info, "32-order-trailing-stop");
+  });
+
   test("lets only the NFT holder cancel", async ({ page }, info) => {
     const s = withOrderBook(baseScenario());
     s.holders["13"] = "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc";
@@ -328,6 +416,9 @@ test("the Debug page lists the vault's functions", async ({ page }, info) => {
   await open(page, baseScenario(), "/debug");
   await expect(page.getByText("OrderVault").first()).toBeVisible();
   await expect(page.getByText("placeOrder").first()).toBeVisible();
+  for (const name of ["OrderVaultLens", "LimitOrderType", "StopOrderType", "TrailingStopType"]) {
+    await expect(page.getByRole("button", { name, exact: true })).toBeVisible();
+  }
   await capture(page, info, "24-debug");
 });
 

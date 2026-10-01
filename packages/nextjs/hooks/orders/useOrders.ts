@@ -12,20 +12,22 @@ import { entityIdFromAddress } from "~~/utils/orders/units";
 type RawOrder = {
   marketId: number;
   side: number;
-  trigger: number;
+  orderType: number;
   status: number;
   funded: boolean;
   slippageBps: number;
   createdAt: number;
   expiry: number;
   amountIn: bigint;
-  triggerPrice: bigint;
+  typeParam: bigint;
   budget: bigint;
+  typeState: `0x${string}`;
 };
 
 const toOrder = (id: bigint, raw: RawOrder): Order => ({ id, ...raw }) as Order;
 
-export type OrderView = Order & { display: DisplayStatus; market: MarketInfo };
+/** An order with its market, display status and the market's Chainlink price (for a trailing stop's live trigger). */
+export type OrderView = Order & { display: DisplayStatus; market: MarketInfo; price: bigint };
 
 const withDisplay = (
   order: Order,
@@ -33,7 +35,10 @@ const withDisplay = (
   guards: Record<number, GuardInfo | undefined>,
 ): OrderView | undefined => {
   const market = markets.find(m => m.id === order.marketId);
-  return market ? { ...order, market, display: displayStatus(order, guards[order.marketId]) } : undefined;
+  const guard = guards[order.marketId];
+  return market
+    ? { ...order, market, display: displayStatus(order, guard), price: guard?.oraclePrice ?? 0n }
+    : undefined;
 };
 
 /** The order NFT collection's entity id, e.g. 0.0.10779996. */
@@ -173,7 +178,12 @@ export const useOrderTrail = (order: OrderView | undefined) => {
   const data = useMemo(() => {
     if (!order || !logs.data) return undefined;
     const { input, output } = legs(order.market, order.side);
-    return buildTrail(vault.abi as Abi, logs.data, input, output);
+    return buildTrail(vault.abi as Abi, logs.data, input, output, {
+      side: order.side,
+      orderType: order.orderType,
+      typeParam: order.typeParam,
+      quote: order.market.quote.symbol,
+    });
   }, [order, logs.data]);
   return { data, isLoading: logs.isLoading, error: logs.error };
 };

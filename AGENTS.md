@@ -23,7 +23,7 @@ yarn format
 yarn next:check-types
 yarn next:build
 
-yarn foundry:test          # unit, fuzz, invariant (mocked system contracts)
+yarn foundry:test          # unit, fuzz, invariant, differential (mocked system contracts)
 yarn foundry:test:fork     # guard against real testnet pools and feeds
 yarn next:test             # vitest units
 yarn next:test:e2e         # Playwright, 1440 and 390 widths
@@ -33,9 +33,11 @@ There is no local chain. Anvil has no Schedule Service (`0x16b`), Token Service 
 
 ## Contracts
 
-- `contracts/OrderVault.sol`: place, cancel, top up, sweep, fill, settle and claim, plus the cost views.
-- `contracts/libraries/MarketGuard.sol`: an external library, which keeps OrderVault under 24 KB. It reads the Chainlink feeds and the pool TWAP, and `paramsValid` bounds the guard settings.
-- `contracts/libraries/OrderCollection.sol`: an external library that creates the order NFT collection once.
+- `contracts/OrderVault.sol`: place, cancel, top up, sweep, fill, settle and claim, and the order-type registry (`registerOrderType`, `setOrderTypeActive`). Raw getters only; the derived views live in the lens.
+- `contracts/OrderVaultLens.sol`: read-only previews for the frontend and Debug page (`minBudget`, `checkCost`, `checkCostShared`, `fillCost`, `nextCheckDelay`, `orderNextCheckDelay`, `sweepStatus`, `sweepGasLimit`, `previewCharges`, `nextBatch`, `payerFloat`, `surplus`), computed from the vault's raw state.
+- `contracts/interfaces/IOrderType.sol` and `contracts/ordertypes/`: the order-type plug-in interface and the three shipped types (limit 0, stop 1, trailing stop 2).
+- `contracts/libraries/SweepMath.sol`: an internal library with every number the vault charges or schedules by, compiled into both the vault and the lens.
+- `contracts/libraries/Settlement.sol`, `MarketRegistry.sol`, `MarketGuard.sol`, `OrderCollection.sol`: external libraries, which keep OrderVault small. Settlement does the swap, HTS and ERC-20 moves; MarketRegistry lists and tunes markets; MarketGuard reads the Chainlink feeds and the pool TWAP and bounds the guard settings; OrderCollection creates the order NFT collection once.
 - `contracts/libraries/PriceMath.sol`: tick math, cross prices and bps helpers.
 - `contracts/types/OrderTypes.sol`: the enums and structs shared across contracts, tests and the ABI.
 - `script/MarketConfig.sol`: testnet addresses, the two markets (guard and sweep parameters) and the gas costs measured on testnet.
@@ -44,12 +46,13 @@ Read `docs/ARCHITECTURE.md` before changing how sweeps are scheduled or charged.
 
 Rules that matter when you change the vault:
 
-- **Size.** OrderVault must stay under 24,576 bytes (`forge build --sizes`); it is at 24,242, so ~334 bytes free. Move logic into an external library (as `MarketGuard` and `OrderCollection` already do), or move read-only views to a lens contract, rather than turning off the check. See README "Extending the vault".
+- **Size.** OrderVault must stay under 24,576 bytes (`forge build --sizes`); it is at 21,254, so 3,322 bytes free. Put new UI reads in `OrderVaultLens` (shared arithmetic in `SweepMath`) and cold, owner-only code in an external library like `MarketRegistry`; keep code every sweep runs in the vault, since a library call costs a cold `delegatecall` each time. See README "Extending the vault".
+- **Order types.** A new kind of order is an `IOrderType` contract registered with `registerOrderType`, not a vault change; `docs/ORDER-TYPES.md` walks through one end to end. `evaluate` must return 0 only when the trigger is met (the vault fills on 0); use `PriceMath.distanceBps` for an unmet trigger. Strategies are `pure` and reached by `staticcall`, so they cannot move funds; the vault still enforces the guard and its own Chainlink floor.
 - **Errors and events.** Use custom errors and events for every state change. The frontend decodes the order trail from events alone, via `utils/orders/trail.ts`.
 - **HTS calls.** Check the response code. Settlement must never revert a sweep: `_retireNft` and `_pay` report failure through events and credits.
 - **Scheduled calls.** Inside a scheduled call, `msg.sender == tx.origin == address(vault)`. Each schedule carries an epoch; a sweep with a stale epoch must return without touching orders. The vault pays for its own schedules, so every sweep must be charged to some order: routine checks to the batch, the final sweep to parking orders, superseded and empty runs to the order that caused them. The invariant tests enforce solvency and liveness (no funded order goes unchecked, no scheduled sweep reverts).
-- **Scheduling cost.** `scheduleCall` is a fixed ~$0.12 network fee whatever the gas limit or delay. Reduce cost by scheduling fewer sweeps (`SweepParams`: `minInterval`, `maxInterval`, `maxMoveBpsPerHour`), not by tuning gas limits.
-- **Costs.** Change them in `MarketConfig.costs()` and on-chain with `setCosts`. Never hard-code them in the frontend.
+- **Scheduling cost.** `scheduleCall` is a fixed network fee of about 1.17 HBAR (≈ $0.12 on 2026-10-01) whatever the gas limit or delay. Reduce cost by scheduling fewer sweeps (`SweepParams`: `minInterval`, `maxInterval`, `maxMoveBpsPerHour`), not by tuning gas limits.
+- **Costs.** Change them in `MarketConfig.costs()` and on-chain with `setCosts`. After changing the sweep path, run `forge test --match-contract GasMeasure --isolate -vv` (v1.0.1 vs this vault, each sweep in its own transaction) and fold the difference in. Never hard-code costs in the frontend.
 
 ### After deploy
 
