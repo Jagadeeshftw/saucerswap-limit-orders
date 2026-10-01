@@ -1,8 +1,6 @@
 [profile.default]
 src = 'contracts'
 out = 'out'
-# Raised so the 10k-step differential test (legacy v1.0.1 vault vs the refactored vault) runs in one call.
-gas_limit = '18446744073709551615'
 # OpenZeppelin comes from npm (node_modules here with yarn, hoisted to the root with npm)
 libs = ['lib', 'node_modules', '../../node_modules']
 fs_permissions = [
