@@ -794,10 +794,11 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
         return _staticEvaluate(o.orderType, o.side, o.typeParam, o.typeState, oraclePrice);
     }
 
-    /// @dev Distance only, for scheduling and views; a failed strategy reads as "far", so it is checked rarely.
+    /// @dev Distance only, for scheduling and views; a failed strategy reads as "far" (clamped so `_delayFor`'s
+    ///      `distance * 1 hours` can't overflow), so it is scheduled at the market's longest interval.
     function _distanceOf(Order storage o, uint256 oraclePrice) internal view returns (uint256) {
         (uint256 d,, bool ok) = _evaluate(o, oraclePrice);
-        return ok ? d : type(uint256).max;
+        return ok ? d : type(uint64).max;
     }
 
     function _openOrder(uint256 orderId) internal view returns (Order storage o) {
