@@ -13,12 +13,15 @@ import { ISaucerSwapV2Router } from "./interfaces/ISaucerSwapV2.sol";
 import { PriceMath } from "./libraries/PriceMath.sol";
 import { MarketGuard } from "./libraries/MarketGuard.sol";
 import { OrderCollection } from "./libraries/OrderCollection.sol";
+import { Settlement } from "./libraries/Settlement.sol";
 import { IOrderType } from "./interfaces/IOrderType.sol";
 import {
     Costs,
     GuardParams,
     GuardReading,
     GuardState,
+    HtsError,
+    HtsOperation,
     Market,
     Order,
     PlaceParams,
@@ -38,13 +41,6 @@ import {
 ///      pool's TWAP to agree with Chainlink, so a manipulated or stale market cannot drain an order.
 contract OrderVault is Ownable2Step, ReentrancyGuard {
     using SafeCast for uint256;
-
-    enum HtsOperation {
-        CreateCollection,
-        Mint,
-        TransferNft,
-        Associate
-    }
 
     // ---------------------------------------------------------------------------------------
     // Constants
@@ -183,7 +179,6 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
 
     error AlreadyInitialized();
     error NotInitialized();
-    error HtsError(HtsOperation operation, int64 responseCode);
     error UnknownMarket(uint256 marketId);
     error MarketInactive(uint256 marketId);
     error InvalidMarket();
@@ -891,14 +886,7 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
 
     /// @dev HIP-1215's suggested probe: exponential back-off with PRNG jitter so vaults don't stampede one second.
     function _findCapacity(uint256 target, uint256 gasLimit) internal view returns (uint256) {
-        if (HSS.hasScheduleCapacity(target, gasLimit)) return target;
-        bytes32 seed = bytes32(block.prevrandao);
-        for (uint256 i; i < CAPACITY_PROBES; ++i) {
-            uint256 backoff = 2 ** i;
-            uint256 candidate = target + backoff + (uint256(keccak256(abi.encodePacked(seed, i))) % backoff);
-            if (HSS.hasScheduleCapacity(candidate, gasLimit)) return candidate;
-        }
-        return target;
+        return Settlement.findCapacity(HSS, target, gasLimit, CAPACITY_PROBES);
     }
 
     function _sweepIsDead(SweepState storage s) internal view returns (bool) {
@@ -1007,33 +995,13 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
         return side == Side.SellBase ? (base, quote) : (quote, base);
     }
 
+    // The external-interaction layer (swap, HTS token/NFT ops, ERC-20 moves) lives in the Settlement library, so
+    // the vault stays small and this code is linked rather than inlined. These are thin forwarders.
     function _swap(Market storage m, address tokenIn, address tokenOut, uint256 amountIn, uint256 minOut)
         internal
-        returns (uint256 amountOut)
+        returns (uint256)
     {
-        ISaucerSwapV2Router.ExactInputSingleParams memory params = ISaucerSwapV2Router.ExactInputSingleParams({
-            tokenIn: tokenIn == HBAR ? WHBAR : tokenIn,
-            tokenOut: tokenOut == HBAR ? WHBAR : tokenOut,
-            fee: m.poolFee,
-            recipient: tokenOut == HBAR ? address(ROUTER) : address(this),
-            deadline: block.timestamp + SWAP_DEADLINE,
-            amountIn: amountIn,
-            amountOutMinimum: minOut,
-            sqrtPriceLimitX96: 0
-        });
-        if (tokenIn != HBAR) {
-            if (!IERC20(tokenIn).approve(address(ROUTER), amountIn)) revert TransferFailed();
-        }
-        uint256 value = tokenIn == HBAR ? amountIn : 0;
-        if (tokenOut == HBAR) {
-            bytes[] memory calls = new bytes[](2);
-            calls[0] = abi.encodeCall(ISaucerSwapV2Router.exactInputSingle, (params));
-            calls[1] = abi.encodeCall(ISaucerSwapV2Router.unwrapWHBAR, (minOut, address(this)));
-            bytes[] memory results = ROUTER.multicall{ value: value }(calls);
-            amountOut = abi.decode(results[0], (uint256));
-        } else {
-            amountOut = ROUTER.exactInputSingle{ value: value }(params);
-        }
+        return Settlement.swap(ROUTER, WHBAR, m.poolFee, tokenIn, tokenOut, amountIn, minOut);
     }
 
     // ---------------------------------------------------------------------------------------
@@ -1041,43 +1009,25 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
     // ---------------------------------------------------------------------------------------
 
     function _mintOrderNft(address to) internal returns (uint256 orderId) {
-        bytes[] memory metadata = new bytes[](1);
-        metadata[0] = bytes("saucerswap-limit-order");
-        (int64 rc,, int64[] memory serials) = HTS.mintToken(collection, 0, metadata);
-        if (rc != HTS_SUCCESS) revert HtsError(HtsOperation.Mint, rc);
-        rc = HTS.transferNFT(collection, address(this), to, serials[0]);
-        if (rc != HTS_SUCCESS) revert HtsError(HtsOperation.TransferNft, rc);
-        orderId = uint256(uint64(serials[0]));
+        return Settlement.mintNft(HTS, collection, to);
     }
 
     /// @dev Remove a settled order's NFT from circulation. Never reverts, so settlement can't be blocked.
     function _retireNft(uint256 orderId, address holder) internal {
-        int64[] memory serials = new int64[](1);
-        // Serials are HTS int64 values that were minted by this vault.
-        // forge-lint: disable-next-line(unsafe-typecast)
-        serials[0] = int64(uint64(orderId));
-        int64 rc;
-        if (holder == address(this)) {
-            (rc,) = HTS.burnToken(collection, 0, serials);
-        } else {
-            rc = HTS.wipeTokenAccountNFT(collection, holder, serials);
-        }
+        int64 rc = Settlement.retireNft(HTS, collection, orderId, holder);
         if (rc != HTS_SUCCESS) emit NftSettlementFailed(orderId, rc);
     }
 
     function _associate(address token) internal {
-        int64 rc = HTS.associateToken(address(this), token);
-        if (rc != HTS_SUCCESS && rc != HTS_ALREADY_ASSOCIATED) revert HtsError(HtsOperation.Associate, rc);
+        Settlement.associate(HTS, token);
     }
 
     function _pullToken(address token, address from, uint256 amount) internal {
-        (bool ok, bytes memory ret) = token.call(abi.encodeCall(IERC20.transferFrom, (from, address(this), amount)));
-        if (!ok || (ret.length != 0 && !abi.decode(ret, (bool)))) revert TransferFailed();
+        if (!Settlement.pullToken(token, from, address(this), amount)) revert TransferFailed();
     }
 
     function _transferToken(address token, address to, uint256 amount) internal returns (bool) {
-        (bool ok, bytes memory ret) = token.call(abi.encodeCall(IERC20.transfer, (to, amount)));
-        return ok && (ret.length == 0 || abi.decode(ret, (bool)));
+        return Settlement.transferToken(token, to, amount);
     }
 
     /// @dev Deliver a payout, or credit it for `claim` if the recipient can't take it right now

@@ -26,6 +26,18 @@ enum Status {
     Expired
 }
 
+/// @notice Which HTS operation failed, for the shared `HtsError`.
+enum HtsOperation {
+    CreateCollection,
+    Mint,
+    TransferNft,
+    Associate
+}
+
+/// @notice An HTS system-contract call returned a non-success response code. Shared by the vault and the
+///         Settlement library so both can revert and callers can catch the same error.
+error HtsError(HtsOperation operation, int64 responseCode);
+
 enum GuardState {
     Open,
     OracleInvalid,

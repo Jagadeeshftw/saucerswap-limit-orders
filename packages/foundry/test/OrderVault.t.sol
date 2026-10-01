@@ -7,6 +7,8 @@ import {
     GuardParams,
     GuardReading,
     GuardState,
+    HtsError,
+    HtsOperation,
     Market,
     Order,
     PlaceParams,
@@ -44,7 +46,7 @@ contract OrderVaultTest is OrderVaultBase {
         hts.forceCreateCode(7);
         vm.prank(owner);
         vm.expectRevert(
-            abi.encodeWithSelector(OrderVault.HtsError.selector, OrderVault.HtsOperation.CreateCollection, int64(7))
+            abi.encodeWithSelector(HtsError.selector, HtsOperation.CreateCollection, int64(7))
         );
         fresh.initialize("x", "x");
     }
@@ -266,7 +268,7 @@ contract OrderVaultTest is OrderVaultBase {
         PlaceParams memory p = _params(HBAR_MARKET, Side.SellBase, 250e8);
         vm.prank(alice);
         vm.expectRevert(
-            abi.encodeWithSelector(OrderVault.HtsError.selector, OrderVault.HtsOperation.TransferNft, int64(184))
+            abi.encodeWithSelector(HtsError.selector, HtsOperation.TransferNft, int64(184))
         );
         vault.placeOrder{ value: 300e8 }(p);
     }

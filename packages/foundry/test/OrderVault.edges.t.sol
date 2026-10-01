@@ -7,6 +7,8 @@ import { MarketGuard } from "../contracts/libraries/MarketGuard.sol";
 import {
     Costs,
     GuardParams,
+    HtsError,
+    HtsOperation,
     Market,
     Order,
     PlaceParams,
@@ -290,7 +292,7 @@ contract OrderVaultEdgeTest is OrderVaultBase {
     function test_listMarket_revertsWhenAssociationFails() public {
         hts.forceAssociateCode(15);
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(OrderVault.HtsError.selector, OrderVault.HtsOperation.Associate, 15));
+        vm.expectRevert(abi.encodeWithSelector(HtsError.selector, HtsOperation.Associate, 15));
         vault.listMarket(_daiMarket());
     }
 
@@ -323,7 +325,7 @@ contract OrderVaultEdgeTest is OrderVaultBase {
         hts.forceMintCode(21);
         uint256 budget = vault.minBudget(HBAR_MARKET, Side.SellBase);
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(OrderVault.HtsError.selector, OrderVault.HtsOperation.Mint, 21));
+        vm.expectRevert(abi.encodeWithSelector(HtsError.selector, HtsOperation.Mint, 21));
         vault.placeOrder{ value: 250e8 + budget }(_sellParams(FAR));
     }
 
