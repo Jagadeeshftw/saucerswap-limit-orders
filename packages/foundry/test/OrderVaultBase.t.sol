@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 import { Test } from "forge-std/Test.sol";
 import { OrderVault } from "../contracts/OrderVault.sol";
+import { OrderVaultLens } from "../contracts/OrderVaultLens.sol";
 import { PriceMath } from "../contracts/libraries/PriceMath.sol";
 import { ISaucerSwapV2Router, ISaucerSwapV2Pool } from "../contracts/interfaces/ISaucerSwapV2.sol";
 import { IAggregatorV3 } from "../contracts/interfaces/IAggregatorV3.sol";
@@ -31,6 +32,7 @@ abstract contract OrderVaultBase is Test {
     int24 internal constant DAI_TICK = 46_056;
 
     OrderVault internal vault;
+    OrderVaultLens internal lens;
     MockHss internal hss;
     MockHts internal hts;
     MockRouter internal router;
@@ -84,6 +86,7 @@ abstract contract OrderVaultBase is Test {
         vault.registerOrderType(address(new TrailingStopType())); // id 2
         vm.stopPrank();
         nft = MockNftCollection(vault.collection());
+        lens = new OrderVaultLens(vault);
 
         for (uint256 i; i < 3; ++i) {
             address user = [alice, bob, keeper][i];
@@ -126,7 +129,7 @@ abstract contract OrderVaultBase is Test {
     /// @dev Sell 250 HBAR when HBAR is at or above `trigger` (8 decimals, USDC).
     function _sellHbar(address maker, uint128 trigger, Trigger kind) internal returns (uint256 orderId) {
         uint128 amount = 250e8;
-        uint256 budget = vault.minBudget(HBAR_MARKET, Side.SellBase);
+        uint256 budget = lens.minBudget(HBAR_MARKET, Side.SellBase);
         vm.prank(maker);
         orderId = vault.placeOrder{ value: amount + budget }(
             PlaceParams({
@@ -143,7 +146,7 @@ abstract contract OrderVaultBase is Test {
 
     /// @dev Spend 50 USDC on HBAR when HBAR is at or below `trigger`.
     function _buyHbar(address maker, uint128 trigger, Trigger kind) internal returns (uint256 orderId) {
-        uint256 budget = vault.minBudget(HBAR_MARKET, Side.BuyBase);
+        uint256 budget = lens.minBudget(HBAR_MARKET, Side.BuyBase);
         vm.prank(maker);
         orderId = vault.placeOrder{ value: budget }(
             PlaceParams({
@@ -160,7 +163,7 @@ abstract contract OrderVaultBase is Test {
 
     /// @dev Stop-loss: sell 1,000 DAI if DAI drops to `trigger` USDC or below.
     function _daiStop(address maker, uint128 trigger) internal returns (uint256 orderId) {
-        uint256 budget = vault.minBudget(DAI_MARKET, Side.SellBase);
+        uint256 budget = lens.minBudget(DAI_MARKET, Side.SellBase);
         vm.prank(maker);
         orderId = vault.placeOrder{ value: budget }(
             PlaceParams({

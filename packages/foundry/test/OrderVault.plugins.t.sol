@@ -71,7 +71,7 @@ contract OrderVaultPluginsTest is OrderVaultBase {
     }
 
     function _placeDai(address maker, uint8 orderType, uint128 amount) internal returns (uint256) {
-        uint256 budget = vault.minBudget(DAI_MARKET, Side.SellBase);
+        uint256 budget = lens.minBudget(DAI_MARKET, Side.SellBase);
         vm.prank(maker);
         return vault.placeOrder{ value: budget }(
             PlaceParams({
@@ -111,7 +111,7 @@ contract OrderVaultPluginsTest is OrderVaultBase {
         vault.setOrderTypeActive(STOP, false);
 
         // New STOP placement is rejected.
-        uint256 budget = vault.minBudget(DAI_MARKET, Side.SellBase);
+        uint256 budget = lens.minBudget(DAI_MARKET, Side.SellBase);
         vm.prank(bob);
         vm.expectRevert(abi.encodeWithSelector(OrderVault.OrderTypeInactive.selector, STOP));
         vault.placeOrder{ value: budget }(

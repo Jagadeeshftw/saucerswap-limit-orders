@@ -114,28 +114,28 @@ contract OrderVaultTest is OrderVaultBase {
         uint256 gas = uint256(c.scheduleGas) + c.sweepBaseGas + c.checkGas;
         uint256 tinycents = gas * c.gasPriceTinycents;
         tinycents += tinycents * c.safetyBps / 10_000;
-        assertEq(vault.checkCost(HBAR_MARKET), _tinybar(gas));
+        assertEq(lens.checkCost(HBAR_MARKET), _tinybar(gas));
         // The mock exchange rate is testnet's (30,000 HBAR per 231,199 cents); one lookup prices a whole call.
-        assertApproxEqAbs(vault.checkCost(HBAR_MARKET), tinycents * 30_000 / 231_199, 1);
+        assertApproxEqAbs(lens.checkCost(HBAR_MARKET), tinycents * 30_000 / 231_199, 1);
     }
 
     function test_checkCostShared_fallsWithMoreOrders() public view {
-        assertLt(vault.checkCostShared(10), vault.checkCostShared(1));
-        assertEq(vault.checkCostShared(0), vault.checkCostShared(1));
+        assertLt(lens.checkCostShared(10), lens.checkCostShared(1));
+        assertEq(lens.checkCostShared(0), lens.checkCostShared(1));
     }
 
     function test_minBudget_isFillPlusSixSoloChecks() public view {
         assertEq(
-            vault.minBudget(HBAR_MARKET, Side.SellBase),
-            vault.fillCost(HBAR_MARKET, Side.SellBase) + 6 * vault.checkCost(HBAR_MARKET)
+            lens.minBudget(HBAR_MARKET, Side.SellBase),
+            lens.fillCost(HBAR_MARKET, Side.SellBase) + 6 * lens.checkCost(HBAR_MARKET)
         );
-        assertGt(vault.fillCost(HBAR_MARKET, Side.BuyBase), vault.fillCost(HBAR_MARKET, Side.SellBase));
+        assertGt(lens.fillCost(HBAR_MARKET, Side.BuyBase), lens.fillCost(HBAR_MARKET, Side.SellBase));
     }
 
     // ------------------------------------------------------------------ placing orders
 
     function test_placeOrder_hbarIn_escrowsMintsAndSchedules() public {
-        uint256 budget = vault.minBudget(HBAR_MARKET, Side.SellBase);
+        uint256 budget = lens.minBudget(HBAR_MARKET, Side.SellBase);
         uint256 orderId = _sellHbar(alice, ABOVE_MARKET, Trigger.AtOrAbove);
 
         Order memory o = vault.getOrder(orderId);
@@ -150,7 +150,7 @@ contract OrderVaultTest is OrderVaultBase {
         assertEq(next.to, address(vault));
         // 0.125 is 12.0% above 0.1116; at 250 bps/h the price needs ~4.8 h to get there.
         assertEq(next.expiry, block.timestamp + 17_280);
-        assertEq(next.gasLimit, vault.sweepGasLimit(HBAR_MARKET));
+        assertEq(next.gasLimit, lens.sweepGasLimit(HBAR_MARKET));
         assertEq(next.callData, abi.encodeCall(OrderVault.sweep, (HBAR_MARKET, uint32(1))));
     }
 
@@ -170,7 +170,7 @@ contract OrderVaultTest is OrderVaultBase {
     }
 
     function test_placeOrder_emitsFullOrder() public {
-        uint256 budget = vault.minBudget(HBAR_MARKET, Side.SellBase);
+        uint256 budget = lens.minBudget(HBAR_MARKET, Side.SellBase);
         PlaceParams memory p = _params(HBAR_MARKET, Side.SellBase, 250e8);
         vm.expectEmit(address(vault));
         emit OrderVault.OrderPlaced(
@@ -181,7 +181,7 @@ contract OrderVaultTest is OrderVaultBase {
     }
 
     function test_placeOrder_rejectsBudgetBelowMinimum() public {
-        uint256 budget = vault.minBudget(HBAR_MARKET, Side.SellBase);
+        uint256 budget = lens.minBudget(HBAR_MARKET, Side.SellBase);
         PlaceParams memory p = _params(HBAR_MARKET, Side.SellBase, 250e8);
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(OrderVault.InsufficientBudget.selector, budget - 1, budget));
@@ -355,7 +355,7 @@ contract OrderVaultTest is OrderVaultBase {
         uint256 budget = vault.getOrder(orderId).budget;
         _runScheduledSweep(HBAR_MARKET);
 
-        uint256 share = vault.checkCost(HBAR_MARKET);
+        uint256 share = lens.checkCost(HBAR_MARKET);
         assertEq(vault.getOrder(orderId).budget, budget - share);
         assertEq(vault.totalBudgets(), budget - share);
         assertEq(hss.count(), 2, "rescheduled");
@@ -370,10 +370,10 @@ contract OrderVaultTest is OrderVaultBase {
         uint256 budgetB = vault.getOrder(b).budget;
         _runScheduledSweep(HBAR_MARKET);
 
-        uint256 share = vault.checkCostShared(2);
+        uint256 share = lens.checkCostShared(2);
         assertEq(vault.getOrder(a).budget, budgetA - share);
         assertEq(vault.getOrder(b).budget, budgetB - share);
-        assertLt(share, vault.checkCost(HBAR_MARKET));
+        assertLt(share, lens.checkCost(HBAR_MARKET));
     }
 
     function test_sweep_fillsSellWhenTriggerMet() public {
@@ -561,7 +561,7 @@ contract OrderVaultTest is OrderVaultBase {
 
     function test_sweep_scheduleFailureCanBeRestarted() public {
         hss.forceCode(355); // SCHEDULE_EXPIRY_IS_BUSY
-        uint256 budget = vault.minBudget(HBAR_MARKET, Side.SellBase);
+        uint256 budget = lens.minBudget(HBAR_MARKET, Side.SellBase);
         PlaceParams memory p = _params(HBAR_MARKET, Side.SellBase, 250e8);
         vm.expectEmit(address(vault));
         emit OrderVault.SweepScheduleFailed(HBAR_MARKET, 355);
@@ -674,11 +674,11 @@ contract OrderVaultTest is OrderVaultBase {
 
     function test_withdrawSurplus_neverTouchesOwedFunds() public {
         _sellHbar(alice, ABOVE_MARKET, Trigger.AtOrAbove);
-        uint256 float = vault.payerFloat();
+        uint256 float = lens.payerFloat();
         assertGt(float, 0, "a funded market reserves a float");
         uint256 owed = vault.escrowed(address(0)) + vault.totalBudgets() + vault.totalCredits(address(0)) + float;
         vm.deal(address(vault), owed + 3e8); // e.g. HTS creation fee change on top of everything owed
-        assertEq(vault.surplus(), 3e8);
+        assertEq(lens.surplus(), 3e8);
         uint256 before = owner.balance;
         vm.prank(owner);
         vault.withdrawSurplus(payable(owner));
@@ -689,7 +689,7 @@ contract OrderVaultTest is OrderVaultBase {
 
     function test_fund_backsTheFloatAndIsWithdrawableAboveIt() public {
         _sellHbar(alice, ABOVE_MARKET, Trigger.AtOrAbove);
-        uint256 float = vault.payerFloat();
+        uint256 float = lens.payerFloat();
         assertGt(float, 0);
         uint256 spareBefore = _spare();
         vm.deal(alice, 10e8);
@@ -697,7 +697,7 @@ contract OrderVaultTest is OrderVaultBase {
         vault.fund{ value: 10e8 }(); // anyone may keep the vault's keeper alive
         assertEq(_spare(), spareBefore + 10e8, "the endowment is spare HBAR");
         // The float stays put; only the endowment above it is withdrawable surplus.
-        assertEq(vault.surplus(), spareBefore + 10e8 - float);
+        assertEq(lens.surplus(), spareBefore + 10e8 - float);
     }
 
     function test_fund_emitsFunded() public {
@@ -709,19 +709,19 @@ contract OrderVaultTest is OrderVaultBase {
     }
 
     function test_payerFloat_zeroWithoutFundedOrders() public view {
-        assertEq(vault.payerFloat(), 0, "no funded market, nothing to reserve");
-        assertEq(vault.surplus(), 0);
+        assertEq(lens.payerFloat(), 0, "no funded market, nothing to reserve");
+        assertEq(lens.surplus(), 0);
     }
 
     function test_surplus_withholdsPayerFloat() public {
         _sellHbar(alice, ABOVE_MARKET, Trigger.AtOrAbove);
         // The float covers one full scheduled sweep of the funded market at the configured price.
-        uint256 float = vault.payerFloat();
-        assertEq(float, _tinybar(vault.sweepGasLimit(HBAR_MARKET)), "float is one sweep at the configured price");
+        uint256 float = lens.payerFloat();
+        assertEq(float, _tinybar(lens.sweepGasLimit(HBAR_MARKET)), "float is one sweep at the configured price");
         // Give the vault exactly the float above what it owes: nothing is withdrawable.
         uint256 owed = vault.escrowed(address(0)) + vault.totalBudgets() + vault.totalCredits(address(0));
         vm.deal(address(vault), owed + float);
-        assertEq(vault.surplus(), 0, "the float is not surplus");
+        assertEq(lens.surplus(), 0, "the float is not surplus");
         vm.prank(owner);
         vm.expectRevert(OrderVault.InvalidAmount.selector);
         vault.withdrawSurplus(payable(owner));

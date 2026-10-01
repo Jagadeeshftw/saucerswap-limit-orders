@@ -22,9 +22,11 @@ import { MarketConfig } from "../script/MarketConfig.sol";
 ///           Those branches depend on how much gas an implementation spends, not on its logic: at the exact
 ///           limit, a sweep that finds more orders than it was sized for can defer its last fill in one vault
 ///           and not the other. They are covered by the refactored vault's own unit and invariant tests.
-///         - Gas: the refactored vault may spend at most `CHECK_OVERHEAD` more per order in the batch and
-///           `FILL_OVERHEAD` more per fill than v1.0.1 on the same sweep (the strategy staticcalls and the
-///           Settlement delegatecalls), which is what `MarketConfig.costs()` must cover.
+///         - Gas: the refactored vault may spend at most `SWEEP_OVERHEAD` more per sweep and `FILL_OVERHEAD`
+///           more per fill than v1.0.1 on the same sweep, which is what `MarketConfig.costs()` must cover. Each
+///           check costs ~3.1k more (the strategy staticcall) but the batch charge no longer re-reads storage on
+///           every recount, so from three orders up a sweep is cheaper than v1.0.1; a fill adds up to ~20k (the
+///           Settlement delegatecalls and the strategy's `minOut`).
 contract DifferentialHandler is OrderVaultBase {
     enum Kind {
         None,
@@ -46,9 +48,8 @@ contract DifferentialHandler is OrderVaultBase {
     }
 
     uint256 internal constant SWEEP_HEADROOM = 10_000_000;
-    uint256 internal constant CHECK_OVERHEAD = 3_300;
+    uint256 internal constant SWEEP_OVERHEAD = 4_000;
     uint256 internal constant FILL_OVERHEAD = 25_000;
-    uint256 internal constant MAX_ORDERS = 20; // MarketConfig's maxOrders for both markets: orders a sweep visits
 
     OrderVaultLegacy public legacy;
     MockNftCollection internal legacyNft;
@@ -178,8 +179,7 @@ contract DifferentialHandler is OrderVaultBase {
         } else {
             (uint256 gasUsed, uint256 orders) = _runLast(address(legacy), 1 + ((p.r >> 8) % 2));
             assertEq(orders, p.orders, "sweeps found different order counts");
-            uint256 batch = orders < MAX_ORDERS ? orders : MAX_ORDERS;
-            assertLe(p.gasUsed, gasUsed + batch * CHECK_OVERHEAD + p.fills * FILL_OVERHEAD, "sweep gas overhead");
+            assertLe(p.gasUsed, gasUsed + SWEEP_OVERHEAD + p.fills * FILL_OVERHEAD, "sweep gas overhead");
         }
     }
 
@@ -204,7 +204,7 @@ contract DifferentialHandler is OrderVaultBase {
             ? uint128(1e6 + ((r >> 72) % 50e6))
             : uint128(dai_ ? 1e8 + ((r >> 72) % 500e8) : 1e8 + ((r >> 72) % 2_000e8));
         maker = [alice, bob, keeper][(r >> 136) % 3];
-        uint256 budget = refactored ? vault.minBudget(market, side) : legacy.minBudget(market, side);
+        uint256 budget = refactored ? lens.minBudget(market, side) : legacy.minBudget(market, side);
         value = !dai_ && side == Side.SellBase ? amount + budget : budget;
         uint40 expiry = uint40(block.timestamp + 1 hours + ((r >> 144) % 30 days));
         uint16 slippage = buy ? 100 : (dai_ ? 30 : 100);
@@ -287,7 +287,7 @@ contract DifferentialHandler is OrderVaultBase {
 ///         and stop-loss placements, cancels, top-ups, scheduled sweeps, price moves and the passage of time, each
 ///         vault in its own transaction. After every completed action their balances, escrow, budgets and every
 ///         order's state must match exactly. This proves the plug-in + Settlement refactor did not change
-///         limit/stop behaviour, and bounds the gas it adds per check and per fill. (Trailing stop is new, so it is
+///         limit/stop behaviour, and bounds the gas it adds per sweep and per fill. (Trailing stop is new, so it is
 ///         out of scope here.) 256 runs x 100 calls per campaign, each run from a fresh fixture and its own random
 ///         sequence: about 16,000 paired actions, 4,900 orders and 1,200 fills.
 contract OrderVaultDifferentialTest is StdInvariant, Test {
