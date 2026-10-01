@@ -178,7 +178,7 @@ contract OrderVaultTest is OrderVaultBase {
             HBAR_MARKET,
             alice,
             Side.SellBase,
-            Trigger.AtOrAbove,
+            LIMIT,
             250e8,
             ABOVE_MARKET,
             50,
@@ -240,9 +240,9 @@ contract OrderVaultTest is OrderVaultBase {
         vault.placeOrder{ value: 300e8 }(p);
 
         p = _params(HBAR_MARKET, Side.SellBase, 250e8);
-        p.triggerPrice = 0;
+        p.typeParam = 0; // a limit order with no trigger price: the strategy's validate rejects it
         vm.prank(alice);
-        vm.expectRevert(OrderVault.InvalidTrigger.selector);
+        vm.expectRevert(OrderVault.InvalidOrderParams.selector);
         vault.placeOrder{ value: 300e8 }(p);
     }
 
@@ -750,9 +750,9 @@ contract OrderVaultTest is OrderVaultBase {
         return PlaceParams({
             marketId: uint32(marketId),
             side: side,
-            trigger: Trigger.AtOrAbove,
+            orderType: LIMIT,
             amountIn: amount,
-            triggerPrice: ABOVE_MARKET,
+            typeParam: ABOVE_MARKET,
             slippageBps: 50,
             expiry: uint40(block.timestamp + 7 days)
         });

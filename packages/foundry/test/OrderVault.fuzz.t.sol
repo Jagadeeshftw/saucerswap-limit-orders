@@ -216,9 +216,9 @@ contract OrderVaultFuzzTest is OrderVaultBase {
             near = bound(a, price / 10, price);
             far = bound(b, price / 10, near);
         }
-        Trigger t = above ? Trigger.AtOrAbove : Trigger.AtOrBelow;
-        uint256 dNear = vault.nextCheckDelay(HBAR_MARKET, t, near, expiry);
-        uint256 dFar = vault.nextCheckDelay(HBAR_MARKET, t, far, expiry);
+        uint8 ot = above ? LIMIT : STOP; // for a sell: at-or-above is a limit, at-or-below is a stop
+        uint256 dNear = vault.nextCheckDelay(HBAR_MARKET, ot, Side.SellBase, uint128(near), expiry);
+        uint256 dFar = vault.nextCheckDelay(HBAR_MARKET, ot, Side.SellBase, uint128(far), expiry);
         assertLe(dNear, dFar, "a farther trigger never waits less");
         assertGe(dNear, 300);
         assertLe(dFar, 6 hours);
@@ -255,9 +255,9 @@ contract OrderVaultFuzzTest is OrderVaultBase {
             PlaceParams({
                 marketId: uint32(c.marketId),
                 side: c.side,
-                trigger: c.trigger,
+                orderType: _typeFor(c.side, c.trigger),
                 amountIn: uint128(c.amount),
-                triggerPrice: uint128(c.triggerPrice),
+                typeParam: uint128(c.triggerPrice),
                 slippageBps: c.slippage,
                 expiry: uint40(block.timestamp + c.lifetime)
             })

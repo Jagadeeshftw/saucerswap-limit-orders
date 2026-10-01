@@ -33,16 +33,16 @@ contract OrderVaultEdgeTest is OrderVaultBase {
 
     function test_nextCheckDelay_followsDistanceWithinBounds() public {
         uint256 expiry = block.timestamp + 7 days;
-        assertEq(vault.nextCheckDelay(HBAR_MARKET, Trigger.AtOrAbove, FAR, expiry), FAR_DELAY);
-        assertEq(vault.nextCheckDelay(HBAR_MARKET, Trigger.AtOrAbove, NEAR, expiry), 1_800);
-        assertEq(vault.nextCheckDelay(HBAR_MARKET, Trigger.AtOrAbove, 20_000_000, expiry), 6 hours, "capped");
-        assertEq(vault.nextCheckDelay(HBAR_MARKET, Trigger.AtOrAbove, 11_170_000, expiry), 300, "floored");
-        assertEq(vault.nextCheckDelay(HBAR_MARKET, Trigger.AtOrAbove, 10_000_000, expiry), 300, "already met");
-        assertEq(vault.nextCheckDelay(HBAR_MARKET, Trigger.AtOrBelow, 10_000_000, expiry), 14_961, "stop 10.4% down");
-        assertEq(vault.nextCheckDelay(HBAR_MARKET, Trigger.AtOrAbove, FAR, block.timestamp + 1_000), 1_000, "expiry");
-        assertEq(vault.nextCheckDelay(HBAR_MARKET, Trigger.AtOrAbove, FAR, block.timestamp + 100), 300);
+        assertEq(vault.nextCheckDelay(HBAR_MARKET, LIMIT, Side.SellBase, FAR, expiry), FAR_DELAY);
+        assertEq(vault.nextCheckDelay(HBAR_MARKET, LIMIT, Side.SellBase, NEAR, expiry), 1_800);
+        assertEq(vault.nextCheckDelay(HBAR_MARKET, LIMIT, Side.SellBase, 20_000_000, expiry), 6 hours, "capped");
+        assertEq(vault.nextCheckDelay(HBAR_MARKET, LIMIT, Side.SellBase, 11_170_000, expiry), 300, "floored");
+        assertEq(vault.nextCheckDelay(HBAR_MARKET, LIMIT, Side.SellBase, 10_000_000, expiry), 300, "already met");
+        assertEq(vault.nextCheckDelay(HBAR_MARKET, STOP, Side.SellBase, 10_000_000, expiry), 14_961, "stop 10.4% down");
+        assertEq(vault.nextCheckDelay(HBAR_MARKET, LIMIT, Side.SellBase, FAR, block.timestamp + 1_000), 1_000, "expiry");
+        assertEq(vault.nextCheckDelay(HBAR_MARKET, LIMIT, Side.SellBase, FAR, block.timestamp + 100), 300);
         hbarFeed.set(0, block.timestamp);
-        assertEq(vault.nextCheckDelay(HBAR_MARKET, Trigger.AtOrAbove, FAR, expiry), 300, "no price: check soon");
+        assertEq(vault.nextCheckDelay(HBAR_MARKET, LIMIT, Side.SellBase, FAR, expiry), 300, "no price: check soon");
     }
 
     function test_placeOrder_nearTriggerSupersedesPendingSweep() public {
@@ -332,7 +332,7 @@ contract OrderVaultEdgeTest is OrderVaultBase {
         uint256 budget = vault.minBudget(HBAR_MARKET, Side.BuyBase);
         PlaceParams memory p = _sellParams(10_000_000);
         p.side = Side.BuyBase;
-        p.trigger = Trigger.AtOrBelow;
+        p.orderType = LIMIT;
         p.amountIn = 50e6;
         vm.prank(alice);
         vm.expectRevert(OrderVault.TransferFailed.selector);
@@ -427,9 +427,9 @@ contract OrderVaultEdgeTest is OrderVaultBase {
         return PlaceParams({
             marketId: uint32(HBAR_MARKET),
             side: Side.SellBase,
-            trigger: Trigger.AtOrAbove,
+            orderType: LIMIT,
             amountIn: 250e8,
-            triggerPrice: trigger,
+            typeParam: trigger,
             slippageBps: 50,
             expiry: uint40(block.timestamp + 7 days)
         });

@@ -13,6 +13,7 @@ import { ISaucerSwapV2Router } from "./interfaces/ISaucerSwapV2.sol";
 import { PriceMath } from "./libraries/PriceMath.sol";
 import { MarketGuard } from "./libraries/MarketGuard.sol";
 import { OrderCollection } from "./libraries/OrderCollection.sol";
+import { IOrderType } from "./interfaces/IOrderType.sol";
 import {
     Costs,
     GuardParams,
@@ -25,8 +26,7 @@ import {
     Status,
     SweepParams,
     SweepState,
-    SweepStatus,
-    Trigger
+    SweepStatus
 } from "./types/OrderTypes.sol";
 
 /// @title OrderVault
@@ -67,6 +67,8 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
     uint256 internal constant SWEEP_GRACE = 120;
     uint256 internal constant MAX_ORDER_LIFETIME = 90 days;
     uint256 internal constant MIN_CHECKS_FUNDED = 6;
+    /// @dev Gas stipend for a strategy's `evaluate`; capped so a gas-burning strategy can't brick a sweep.
+    uint256 internal constant EVAL_GAS = 100_000;
     uint256 internal constant PAYOUT_GAS = 30_000;
     uint256 internal constant SWAP_DEADLINE = 300;
     /// @dev Tinycents converted per exchange-rate lookup; every fee in one call is priced from a single lookup.
@@ -104,6 +106,12 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
     mapping(uint256 orderId => uint256) internal _openIndexPlusOne;
     mapping(uint256 orderId => Order) internal _orders;
 
+    /// @notice The order-type strategy registry. `orderTypes[id]` is a view-only `IOrderType`; `orderTypeActive`
+    ///         gates whether NEW orders may use it. Append-only ids, so an order's bound type never changes.
+    mapping(uint8 id => address impl) public orderTypes;
+    mapping(uint8 id => bool active) public orderTypeActive;
+    uint8 public orderTypeCount;
+
     /// @notice Tokens held on behalf of open orders, keyed by token (address(0) is HBAR).
     mapping(address token => uint256) public escrowed;
     /// @notice HBAR prepaid for scheduled checks and fills of open orders.
@@ -125,13 +133,19 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
         uint256 indexed marketId,
         address indexed maker,
         Side side,
-        Trigger trigger,
+        uint8 orderType,
         uint256 amountIn,
-        uint256 triggerPrice,
+        uint256 typeParam,
         uint256 slippageBps,
         uint256 expiry,
         uint256 budget
     );
+    event OrderTypeRegistered(uint8 indexed id, address impl);
+    event OrderTypeActiveSet(uint8 indexed id, bool active);
+    /// @notice A strategy returned new per-order state (e.g. a trailing stop raised its peak); the vault stored it.
+    event OrderStateUpdated(uint256 indexed orderId, bytes32 state);
+    /// @notice A strategy reverted or ran out of its gas stipend during a sweep; the order was skipped, not filled.
+    event OrderEvalSkipped(uint256 indexed orderId);
     event OrderFilled(
         uint256 indexed orderId,
         address indexed holder,
@@ -178,6 +192,9 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
     error InvalidCosts();
     error InvalidAmount();
     error InvalidTrigger();
+    error UnknownOrderType(uint8 id);
+    error OrderTypeInactive(uint8 id);
+    error InvalidOrderParams();
     error InvalidSlippage(uint256 slippageBps, uint256 minBps, uint256 maxBps);
     error InvalidExpiry(uint256 expiry);
     error InsufficientBudget(uint256 provided, uint256 required);
@@ -257,6 +274,25 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
         _setCosts(costs_);
     }
 
+    /// @notice Register a view-only order-type strategy and return its id. Append-only: ids are never reused, so
+    ///         an order's bound type can never change under it. The new type is active for new orders at once.
+    function registerOrderType(address impl) external onlyOwner returns (uint8 id) {
+        if (impl == address(0)) revert InvalidOrderParams();
+        id = orderTypeCount++;
+        orderTypes[id] = impl;
+        orderTypeActive[id] = true;
+        emit OrderTypeRegistered(id, impl);
+        emit OrderTypeActiveSet(id, true);
+    }
+
+    /// @notice Pause or resume an order type for NEW orders. Existing orders of that type keep running and can
+    ///         always be cancelled; only placement is gated.
+    function setOrderTypeActive(uint8 id, bool active) external onlyOwner {
+        if (id >= orderTypeCount) revert UnknownOrderType(id);
+        orderTypeActive[id] = active;
+        emit OrderTypeActiveSet(id, active);
+    }
+
     /// @notice Endow the vault with liquid HBAR to back the payer float, so its scheduled sweeps can always
     ///         pay their gas at execution. Anyone may fund it; only the owner may withdraw the surplus above
     ///         the float. Kept separate from `receive`, which only accepts swap proceeds from the router.
@@ -285,7 +321,13 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
         Market storage m = _market(p.marketId);
         if (!m.active) revert MarketInactive(p.marketId);
         if (p.amountIn == 0) revert InvalidAmount();
-        if (p.triggerPrice == 0) revert InvalidTrigger();
+        if (p.orderType >= orderTypeCount) revert UnknownOrderType(p.orderType);
+        if (!orderTypeActive[p.orderType]) revert OrderTypeInactive(p.orderType);
+        if (
+            !IOrderType(orderTypes[p.orderType]).validate(
+                p.side, p.amountIn, p.typeParam, p.slippageBps, p.expiry, block.timestamp.toUint40()
+            )
+        ) revert InvalidOrderParams();
         uint256 minSlippage = uint256(m.poolFee) / 100;
         if (p.slippageBps <= minSlippage || p.slippageBps > m.guard.maxSlippageBps) {
             revert InvalidSlippage(p.slippageBps, minSlippage + 1, m.guard.maxSlippageBps);
@@ -312,15 +354,16 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
         _orders[orderId] = Order({
             marketId: p.marketId,
             side: p.side,
-            trigger: p.trigger,
+            orderType: p.orderType,
             status: Status.Open,
             funded: true,
             slippageBps: p.slippageBps,
             createdAt: block.timestamp.toUint40(),
             expiry: p.expiry,
             amountIn: p.amountIn,
-            triggerPrice: p.triggerPrice,
-            budget: budget.toUint128()
+            typeParam: p.typeParam,
+            budget: budget.toUint128(),
+            typeState: bytes32(0)
         });
         _openOrders[p.marketId].push(orderId);
         _openIndexPlusOne[orderId] = _openOrders[p.marketId].length;
@@ -331,9 +374,9 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
             p.marketId,
             msg.sender,
             p.side,
-            p.trigger,
+            p.orderType,
             p.amountIn,
-            p.triggerPrice,
+            p.typeParam,
             p.slippageBps,
             p.expiry,
             budget
@@ -374,7 +417,10 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
             return true;
         }
         GuardReading memory g = guardReading(o.marketId);
-        if (g.oraclePrice == 0 || !_triggerMet(o, g.oraclePrice)) return false;
+        if (g.oraclePrice == 0) return false;
+        (uint256 distance, bytes32 newState, bool ok) = _evaluate(o, g.oraclePrice);
+        if (!ok || distance != 0) return false;
+        if (newState != o.typeState) o.typeState = newState;
         if (g.state != GuardState.Open) {
             emit FillHeld(orderId, g.state, g.oraclePrice, g.poolPrice);
             return false;
@@ -472,7 +518,21 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
         if (pass.scheduled && !_charge(orderId, o, pass.share, pass.parkFee, pass.rate)) return;
         pass.checked++;
         GuardReading memory g = pass.guard;
-        uint256 distance = g.oraclePrice == 0 ? 0 : _distance(o.trigger, o.triggerPrice, g.oraclePrice);
+        uint256 distance;
+        if (g.oraclePrice != 0) {
+            (uint256 d, bytes32 newState, bool ok) = _evaluate(o, g.oraclePrice);
+            if (!ok) {
+                // A reverting or gas-starved strategy skips this order; keep checking soon so it recovers.
+                emit OrderEvalSkipped(orderId);
+                if (m.sweep.minInterval < pass.next) pass.next = m.sweep.minInterval;
+                return;
+            }
+            if (newState != o.typeState) {
+                o.typeState = newState; // e.g. a trailing stop raising its peak
+                emit OrderStateUpdated(orderId, newState);
+            }
+            distance = d;
+        }
         if (distance > 0) {
             uint256 wait = _delayFor(m, distance, o.expiry);
             if (wait < pass.next) pass.next = wait;
@@ -502,7 +562,11 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
         Order storage o = _orders[orderId];
         Market storage m = _markets[o.marketId];
         (address tokenIn, address tokenOut) = _route(m, o.side);
+        // The vault's own Chainlink-priced floor (value less the maker's slippage) always applies. A strategy's
+        // minOut can only tighten it, never loosen it — so a hostile strategy cannot force a bad-price fill.
         uint256 minOut = PriceMath.lessBps(_valueAt(m, o.side, o.amountIn, oraclePrice), o.slippageBps);
+        uint256 typeFloor = IOrderType(orderTypes[o.orderType]).minOut(o.side, o.amountIn, o.typeParam, oraclePrice);
+        if (typeFloor > minOut) minOut = typeFloor;
         uint256 amountIn = o.amountIn;
 
         escrowed[tokenIn] -= amountIn;
@@ -562,18 +626,35 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
         return _minBudget(_market(marketId), side, _rate());
     }
 
-    /// @notice Seconds until an order at `triggerPrice` would next be checked, at today's Chainlink price.
-    /// @dev The same rule a sweep applies; the frontend uses it to size budgets. Held or triggered orders
-    ///      get `minInterval`, and the wait shrinks as the price approaches the trigger.
-    function nextCheckDelay(uint256 marketId, Trigger trigger, uint256 triggerPrice, uint256 expiry)
+    /// @notice Seconds until an order of `orderType` with `typeParam` would next be checked, at today's price.
+    /// @dev The same rule a sweep applies; the frontend uses it to size budgets. A fresh order carries no state,
+    ///      so this reads the first-check delay. Held or triggered orders get `minInterval`.
+    function nextCheckDelay(uint256 marketId, uint8 orderType, Side side, uint128 typeParam, uint256 expiry)
         external
         view
         returns (uint256)
     {
         Market storage m = _market(marketId);
         GuardReading memory g = guardReading(marketId);
-        if (g.oraclePrice == 0) return m.sweep.minInterval;
-        return _delayFor(m, _distance(trigger, triggerPrice, g.oraclePrice), expiry);
+        if (g.oraclePrice == 0 || orderType >= orderTypeCount) return m.sweep.minInterval;
+        (uint256 distance,, bool ok) =
+            _staticEvaluate(orderType, side, typeParam, bytes32(0), g.oraclePrice);
+        return ok ? _delayFor(m, distance, expiry) : m.sweep.minInterval;
+    }
+
+    /// @dev `_evaluate` for an order that may not exist yet (nextCheckDelay for an unplaced order).
+    function _staticEvaluate(uint8 orderType, Side side, uint128 typeParam, bytes32 state, uint256 oraclePrice)
+        internal
+        view
+        returns (uint256 distance, bytes32 newState, bool ok)
+    {
+        try IOrderType(orderTypes[orderType]).evaluate{ gas: EVAL_GAS }(side, typeParam, state, oraclePrice) returns (
+            uint256 d, bytes32 ns
+        ) {
+            return (d, ns, true);
+        } catch {
+            return (0, state, false);
+        }
     }
 
     /// @notice Whether a market's checks are running. `Stalled` means funded orders are waiting but no
@@ -702,14 +783,21 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
         return _gasToTinybar(_fillGas(_markets[o.marketId], o.side) + _tailGas(), rate);
     }
 
-    function _triggerMet(Order storage o, uint256 price) internal view returns (bool) {
-        return _distance(o.trigger, o.triggerPrice, price) == 0;
+    /// @dev Ask an order's strategy for its distance-to-trigger and next state. View-only (staticcall, since
+    ///      `evaluate` is pure), gas-capped and failure-tolerant: a strategy that reverts or burns its stipend
+    ///      returns `ok == false`, so the sweep skips the order instead of bricking for everyone.
+    function _evaluate(Order storage o, uint256 oraclePrice)
+        internal
+        view
+        returns (uint256 distance, bytes32 newState, bool ok)
+    {
+        return _staticEvaluate(o.orderType, o.side, o.typeParam, o.typeState, oraclePrice);
     }
 
-    /// @dev How far `price` still has to move to meet the trigger, in bps of `price`; 0 once it is met.
-    function _distance(Trigger trigger, uint256 triggerPrice, uint256 price) internal pure returns (uint256) {
-        if (trigger == Trigger.AtOrAbove ? price >= triggerPrice : price <= triggerPrice) return 0;
-        return PriceMath.deviationBps(triggerPrice, price);
+    /// @dev Distance only, for scheduling and views; a failed strategy reads as "far", so it is checked rarely.
+    function _distanceOf(Order storage o, uint256 oraclePrice) internal view returns (uint256) {
+        (uint256 d,, bool ok) = _evaluate(o, oraclePrice);
+        return ok ? d : type(uint256).max;
     }
 
     function _openOrder(uint256 orderId) internal view returns (Order storage o) {
@@ -766,9 +854,7 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
     function _ensureSweep(uint256 orderId, Order storage o, Market storage m, uint256 rate) internal {
         SweepState storage s = sweeps[o.marketId];
         GuardReading memory g = guardReading(o.marketId);
-        uint256 delay = g.oraclePrice == 0
-            ? m.sweep.minInterval
-            : _delayFor(m, _distance(o.trigger, o.triggerPrice, g.oraclePrice), o.expiry);
+        uint256 delay = g.oraclePrice == 0 ? m.sweep.minInterval : _delayFor(m, _distanceOf(o, g.oraclePrice), o.expiry);
         bool dead = _sweepIsDead(s);
         if (!dead) {
             if (block.timestamp + delay + m.sweep.minInterval >= s.nextSweepAt) return;

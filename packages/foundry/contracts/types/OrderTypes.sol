@@ -106,23 +106,24 @@ struct Costs {
 struct Order {
     uint32 marketId;
     Side side;
-    Trigger trigger;
+    uint8 orderType; // index into the vault's order-type registry (limit, stop, trailing, …)
     Status status;
     bool funded;
     uint16 slippageBps;
     uint40 createdAt;
     uint40 expiry;
     uint128 amountIn;
-    uint128 triggerPrice;
+    uint128 typeParam; // the type's parameter: a trigger price for limit/stop, a trail in bps for trailing
     uint128 budget;
+    bytes32 typeState; // the type's opaque per-order state (e.g. a trailing peak); zero for stateless types
 }
 
 struct PlaceParams {
     uint32 marketId;
     Side side;
-    Trigger trigger;
+    uint8 orderType;
     uint128 amountIn;
-    uint128 triggerPrice;
+    uint128 typeParam;
     uint16 slippageBps;
     uint40 expiry;
 }

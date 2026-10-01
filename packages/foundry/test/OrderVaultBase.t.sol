@@ -7,6 +7,9 @@ import { PriceMath } from "../contracts/libraries/PriceMath.sol";
 import { ISaucerSwapV2Router, ISaucerSwapV2Pool } from "../contracts/interfaces/ISaucerSwapV2.sol";
 import { IAggregatorV3 } from "../contracts/interfaces/IAggregatorV3.sol";
 import { Costs, Market, PlaceParams, Side, Trigger } from "../contracts/types/OrderTypes.sol";
+import { LimitOrderType } from "../contracts/ordertypes/LimitOrderType.sol";
+import { StopOrderType } from "../contracts/ordertypes/StopOrderType.sol";
+import { TrailingStopType } from "../contracts/ordertypes/TrailingStopType.sol";
 import { MarketConfig } from "../script/MarketConfig.sol";
 import { MockExchangeRate, MockHss, MockHts, MockNftCollection } from "./mocks/MockHederaSystem.sol";
 import { MockAggregator, MockPool, MockRouter, MockToken } from "./mocks/MockMarket.sol";
@@ -17,6 +20,9 @@ abstract contract OrderVaultBase is Test {
     uint256 internal constant RAY = 1e27;
     uint256 internal constant HBAR_MARKET = 1;
     uint256 internal constant DAI_MARKET = 2;
+    uint8 internal constant LIMIT = 0;
+    uint8 internal constant STOP = 1;
+    uint8 internal constant TRAILING = 2;
 
     /// @dev HBAR at 0.1116 USDC; the pool stores token1 (tinybar) per token0 (micro-USDC).
     int256 internal constant HBAR_USD = 11_160_000;
@@ -73,6 +79,9 @@ abstract contract OrderVaultBase is Test {
         vault.initialize{ value: 20 ether }("SaucerSwap Limit Order", "SSLO");
         vault.listMarket(_hbarMarket());
         vault.listMarket(_daiMarket());
+        vault.registerOrderType(address(new LimitOrderType())); // id 0
+        vault.registerOrderType(address(new StopOrderType())); // id 1
+        vault.registerOrderType(address(new TrailingStopType())); // id 2
         vm.stopPrank();
         nft = MockNftCollection(vault.collection());
 
@@ -107,6 +116,13 @@ abstract contract OrderVaultBase is Test {
         m.pool = ISaucerSwapV2Pool(address(daiPool));
     }
 
+    /// @dev Maps the legacy (side, trigger-direction) selector to the registered order-type id, so existing
+    ///      tests keep expressing intent as AtOrAbove/AtOrBelow while placing through the plug-in registry.
+    function _typeFor(Side side, Trigger kind) internal pure returns (uint8) {
+        bool limit = side == Side.SellBase ? kind == Trigger.AtOrAbove : kind == Trigger.AtOrBelow;
+        return limit ? LIMIT : STOP;
+    }
+
     /// @dev Sell 250 HBAR when HBAR is at or above `trigger` (8 decimals, USDC).
     function _sellHbar(address maker, uint128 trigger, Trigger kind) internal returns (uint256 orderId) {
         uint128 amount = 250e8;
@@ -116,9 +132,9 @@ abstract contract OrderVaultBase is Test {
             PlaceParams({
                 marketId: uint32(HBAR_MARKET),
                 side: Side.SellBase,
-                trigger: kind,
+                orderType: _typeFor(Side.SellBase, kind),
                 amountIn: amount,
-                triggerPrice: trigger,
+                typeParam: trigger,
                 slippageBps: 50,
                 expiry: uint40(block.timestamp + 7 days)
             })
@@ -133,9 +149,9 @@ abstract contract OrderVaultBase is Test {
             PlaceParams({
                 marketId: uint32(HBAR_MARKET),
                 side: Side.BuyBase,
-                trigger: kind,
+                orderType: _typeFor(Side.BuyBase, kind),
                 amountIn: 50e6,
-                triggerPrice: trigger,
+                typeParam: trigger,
                 slippageBps: 50,
                 expiry: uint40(block.timestamp + 7 days)
             })
@@ -150,9 +166,9 @@ abstract contract OrderVaultBase is Test {
             PlaceParams({
                 marketId: uint32(DAI_MARKET),
                 side: Side.SellBase,
-                trigger: Trigger.AtOrBelow,
+                orderType: STOP,
                 amountIn: 1_000e8,
-                triggerPrice: trigger,
+                typeParam: trigger,
                 slippageBps: 30,
                 expiry: uint40(block.timestamp + 7 days)
             })

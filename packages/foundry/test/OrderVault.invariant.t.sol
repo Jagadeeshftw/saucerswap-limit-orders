@@ -88,9 +88,10 @@ contract VaultHandler is Test {
             PlaceParams({
                 marketId: uint32(marketId),
                 side: side,
-                trigger: above ? Trigger.AtOrAbove : Trigger.AtOrBelow,
+                // limit = sell at-or-above / buy at-or-below (type 0); stop = the mirror (type 1)
+                orderType: ((side == Side.SellBase) == above) ? 0 : 1,
                 amountIn: uint128(amount),
-                triggerPrice: uint128(trigger),
+                typeParam: uint128(trigger),
                 slippageBps: daiMarket ? 30 : 100,
                 expiry: uint40(block.timestamp + bound(amountSeed, 1 hours, 7 days))
             })
