@@ -66,6 +66,14 @@
       "description": "The first scheduled check sets trailing stop #1's peak"
     },
     {
+      "timestamp": "1790874527.080484104",
+      "scheduled": true,
+      "contract": "0xc265045c65d0114109072d60b3a60231427a06a9",
+      "event": "OrderStateUpdated",
+      "topic0": "0x5dd40b698b74bd8012621fe84b0c6d41dd12d7b7e4b8b05c45911abd5794fa6c",
+      "description": "A later scheduled check raises HBAR trailing stop #7's peak as the price rises; its trigger follows"
+    },
+    {
       "timestamp": "1790871684.039916208",
       "scheduled": true,
       "contract": "0xc265045c65d0114109072d60b3a60231427a06a9",
