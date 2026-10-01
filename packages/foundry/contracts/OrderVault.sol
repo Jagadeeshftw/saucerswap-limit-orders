@@ -11,6 +11,7 @@ import { IExchangeRate } from "./interfaces/IExchangeRate.sol";
 import { ISaucerSwapV2Router } from "./interfaces/ISaucerSwapV2.sol";
 import { PriceMath } from "./libraries/PriceMath.sol";
 import { MarketGuard } from "./libraries/MarketGuard.sol";
+import { MarketRegistry } from "./libraries/MarketRegistry.sol";
 import { OrderCollection } from "./libraries/OrderCollection.sol";
 import { Settlement } from "./libraries/Settlement.sol";
 import { SweepMath } from "./libraries/SweepMath.sol";
@@ -51,11 +52,7 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
     address internal constant HBAR = address(0);
 
     int64 internal constant HTS_SUCCESS = 22;
-    int64 internal constant HTS_ALREADY_ASSOCIATED = 194;
 
-    /// @dev HIP-1215 caps expiry 62 days ahead; the minimum is a few seconds past consensus time.
-    uint256 internal constant MIN_SWEEP_INTERVAL = 30;
-    uint256 internal constant MAX_SWEEP_INTERVAL = 1 days;
     uint256 internal constant MAX_HELD_STREAK = 8;
     uint256 internal constant CAPACITY_PROBES = 6;
     uint256 internal constant MAX_ORDER_LIFETIME = 90 days;
@@ -176,6 +173,7 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
     error NotInitialized();
     error UnknownMarket(uint256 marketId);
     error MarketInactive(uint256 marketId);
+    /// @dev Raised by `MarketRegistry` when listing or tuning a market; declared here so the vault's ABI decodes them.
     error InvalidMarket();
     error InvalidGuard();
     error InvalidSweep();
@@ -220,29 +218,11 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
         emit CollectionCreated(created);
     }
 
-    /// @notice List a market and associate the vault with its HTS tokens.
+    /// @notice List a market and associate the vault with its HTS tokens. Validation and the storage write live
+    ///         in `MarketRegistry`; the bounds keep a market's guard from being switched off.
     function listMarket(Market calldata market) external onlyOwner returns (uint256 marketId) {
-        _validateMarket(market);
         marketId = ++marketCount;
-        Market storage m = _markets[marketId];
-        m.base = market.base;
-        m.quote = market.quote;
-        m.baseDecimals = market.baseDecimals;
-        m.quoteDecimals = market.quoteDecimals;
-        m.baseIsHbar = market.baseIsHbar;
-        m.quoteIsHbar = market.quoteIsHbar;
-        m.baseFeed = market.baseFeed;
-        m.quoteFeed = market.quoteFeed;
-        m.baseFeedDecimals = market.baseFeed.decimals();
-        m.quoteFeedDecimals = market.quoteFeed.decimals();
-        m.pool = market.pool;
-        m.poolFee = market.poolFee;
-        m.baseIsToken0 = market.pool.token0() == market.base;
-        m.active = true;
-        m.guard = market.guard;
-        m.sweep = market.sweep;
-        if (!market.baseIsHbar) _associate(market.base);
-        if (!market.quoteIsHbar) _associate(market.quote);
+        MarketRegistry.list(_markets[marketId], market);
         emit MarketListed(marketId, market.base, market.quote, address(market.pool), market.poolFee);
     }
 
@@ -251,12 +231,7 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
         external
         onlyOwner
     {
-        Market storage m = _market(marketId);
-        _validateGuard(guard, m.poolFee);
-        _validateSweep(sweepParams);
-        m.guard = guard;
-        m.sweep = sweepParams;
-        m.active = active;
+        MarketRegistry.update(_market(marketId), guard, sweepParams, active);
         emit MarketUpdated(marketId);
     }
 
@@ -906,10 +881,6 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
         if (rc != HTS_SUCCESS) emit NftSettlementFailed(orderId, rc);
     }
 
-    function _associate(address token) internal {
-        Settlement.associate(HTS, token);
-    }
-
     function _pullToken(address token, address from, uint256 amount) internal {
         if (!Settlement.pullToken(token, from, address(this), amount)) revert TransferFailed();
     }
@@ -944,26 +915,6 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
     function _market(uint256 marketId) internal view returns (Market storage m) {
         m = _markets[marketId];
         if (address(m.pool) == address(0)) revert UnknownMarket(marketId);
-    }
-
-    function _validateMarket(Market calldata market) internal pure {
-        if (address(market.pool) == address(0) || market.base == address(0) || market.quote == address(0)) {
-            revert InvalidMarket();
-        }
-        if (market.base == market.quote || (market.baseIsHbar && market.quoteIsHbar)) revert InvalidMarket();
-        if (address(market.baseFeed) == address(0) || address(market.quoteFeed) == address(0)) revert InvalidMarket();
-        _validateGuard(market.guard, market.poolFee);
-        _validateSweep(market.sweep);
-    }
-
-    function _validateGuard(GuardParams calldata g, uint24 poolFee) internal pure {
-        if (!MarketGuard.paramsValid(g, poolFee)) revert InvalidGuard();
-    }
-
-    function _validateSweep(SweepParams calldata p) internal pure {
-        if (p.minInterval < MIN_SWEEP_INTERVAL || p.maxInterval > MAX_SWEEP_INTERVAL) revert InvalidSweep();
-        if (p.minInterval > p.maxInterval || p.maxMoveBpsPerHour == 0) revert InvalidSweep();
-        if (p.maxOrders == 0 || p.maxFills == 0 || p.maxFills > p.maxOrders) revert InvalidSweep();
     }
 
     /// @notice Receives HBAR the router unwraps when an order buys HBAR.
