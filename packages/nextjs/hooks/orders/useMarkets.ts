@@ -2,9 +2,9 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { erc20Abi } from "viem";
 import { useReadContract, useReadContracts } from "wagmi";
-import { REFRESH_MS, vault } from "~~/hooks/orders/useVault";
+import { REFRESH_MS, lens, vault } from "~~/hooks/orders/useVault";
 import { fetchContractId } from "~~/services/mirror";
-import { GuardState, Side } from "~~/utils/orders/orders";
+import { GuardState, type OrderType, Side } from "~~/utils/orders/orders";
 import type { TokenMeta } from "~~/utils/orders/trail";
 import { entityIdFromAddress, isLongZero } from "~~/utils/orders/units";
 
@@ -144,7 +144,7 @@ export const useGuard = (marketId: number | undefined) => {
 };
 
 /**
- * What a new order costs in check budget, straight from the vault's cost views.
+ * What a new order costs in check budget, straight from the lens (the vault's own cost maths).
  * `sharedCheck` assumes the new order joins the orders already funded in this market.
  */
 export const useOrderCosts = (marketId: number | undefined, side: Side) => {
@@ -152,9 +152,9 @@ export const useOrderCosts = (marketId: number | undefined, side: Side) => {
   const enabled = marketId !== undefined;
   const { data } = useReadContracts({
     contracts: [
-      { ...vault, functionName: "checkCost", args: [id] },
-      { ...vault, functionName: "fillCost", args: [id, side] },
-      { ...vault, functionName: "minBudget", args: [id, side] },
+      { ...lens, functionName: "checkCost", args: [id] },
+      { ...lens, functionName: "fillCost", args: [id, side] },
+      { ...lens, functionName: "minBudget", args: [id, side] },
       { ...vault, functionName: "sweeps", args: [id] },
     ],
     query: { enabled, refetchInterval: REFRESH_MS },
@@ -162,7 +162,7 @@ export const useOrderCosts = (marketId: number | undefined, side: Side) => {
   const fundedOrders = data?.[3]?.status === "success" ? Number(data[3].result[3]) : 0;
   // `fillCost` already includes the order's part of a final sweep, so it is the whole reserve.
   const { data: sharedCheck } = useReadContract({
-    ...vault,
+    ...lens,
     functionName: "checkCostShared",
     args: [BigInt(fundedOrders + 1)],
     query: { enabled: enabled && data !== undefined },
@@ -186,7 +186,7 @@ export enum SweepStatus {
 /** Whether the market's checks are running, and when the Schedule Service runs the next one. */
 export const useSweepStatus = (marketId: number | undefined) => {
   const { data, refetch } = useReadContract({
-    ...vault,
+    ...lens,
     functionName: "sweepStatus",
     args: [BigInt(marketId ?? 0)],
     query: { enabled: marketId !== undefined, refetchInterval: REFRESH_MS },
@@ -200,22 +200,24 @@ export const useSweepStatus = (marketId: number | undefined) => {
 
 /**
  * Seconds until an order would next be checked at today's Chainlink price, for each candidate lifetime.
- * The vault answers with the same rule its sweeps use, so the ticket can size a budget for the whole lifetime.
+ * The lens answers with the same rule the vault's sweeps use (asking the order type how far the trigger is), so
+ * the ticket can size a budget for the whole lifetime. `typeParam` is the trigger price, or the trail in bps.
  */
 export const useCheckDelays = (
   marketId: number,
-  trigger: number,
-  triggerPrice: bigint | null,
+  orderType: OrderType,
+  side: Side,
+  typeParam: bigint | null,
   lifetimes: readonly number[],
 ) => {
   const now = Math.floor(Date.now() / 60_000) * 60;
   const { data } = useReadContracts({
     contracts: lifetimes.map(seconds => ({
-      ...vault,
+      ...lens,
       functionName: "nextCheckDelay" as const,
-      args: [BigInt(marketId), trigger, triggerPrice ?? 0n, BigInt(now + seconds)] as const,
+      args: [BigInt(marketId), orderType, side, typeParam ?? 0n, BigInt(now + seconds)] as const,
     })),
-    query: { enabled: Boolean(triggerPrice && triggerPrice > 0n), refetchInterval: REFRESH_MS },
+    query: { enabled: Boolean(typeParam && typeParam > 0n), refetchInterval: REFRESH_MS },
   });
   return lifetimes.map((_, i) => (data?.[i]?.status === "success" ? Number(data[i].result as bigint) : undefined));
 };

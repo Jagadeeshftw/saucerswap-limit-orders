@@ -38,3 +38,26 @@ export const durationText = (seconds: number) =>
     : seconds >= 3600
       ? `${Math.round(seconds / 3600)} h`
       : `${Math.max(1, Math.round(seconds / 60))} min`;
+
+/** How many checks `budget` pays for at `perCheck` each, after holding back `reserve` for the fill. */
+export const checksAffordable = (budget: bigint, reserve: bigint, perCheck: bigint) =>
+  budget <= reserve || perCheck === 0n ? 0 : Number((budget - reserve) / perCheck);
+
+/**
+ * When the last of `checks` checks runs while the guard holds a triggered order: the first after minInterval,
+ * then the vault's doubling back-off (the same schedule as checksWhileHeld).
+ */
+export const heldSeconds = (checks: number, minInterval: number, maxInterval: number) => {
+  if (checks < 1) return 0;
+  let at = minInterval;
+  for (let streak = 1; streak < checks; streak++) at += Math.min(minInterval * 2 ** Math.min(streak, 8), maxInterval);
+  return at;
+};
+
+/** A duration in words for "covers ~6 days" style copy: days from a day up, then hours, then minutes. */
+export const durationWords = (seconds: number) => {
+  const plural = (n: number, unit: string) => `${n} ${unit}${n === 1 ? "" : "s"}`;
+  if (seconds >= 86_400) return plural(Math.floor(seconds / 86_400), "day");
+  if (seconds >= 3600) return `${Math.floor(seconds / 3600)} h`;
+  return `${Math.max(1, Math.floor(seconds / 60))} min`;
+};

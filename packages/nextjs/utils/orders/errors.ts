@@ -32,6 +32,12 @@ export const explainError = (error: unknown): string => {
       return "Enter an amount greater than zero.";
     case "InvalidTrigger":
       return "Enter a trigger price greater than zero.";
+    case "InvalidOrderParams":
+      return "The order type rejected these settings: check the trigger, or a trail between 0.50% and 50% (trailing stops sell only).";
+    case "OrderTypeInactive":
+      return "This order type is paused for new orders. Existing orders of this type keep running.";
+    case "UnknownOrderType":
+      return "The vault has no order type with this id.";
     case "MarketInactive":
       return "This market is paused for new orders.";
     case "NotHolder":
