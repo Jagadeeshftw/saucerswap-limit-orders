@@ -112,7 +112,7 @@ yarn foundry:account:import      # or foundry:account:generate, then fund it fro
 yarn foundry:deploy              # Hedera testnet; about 25 HBAR, mostly the HTS collection fee
 ```
 
-This deploys `OrderVault` and its two libraries, creates the NFT collection, lists both markets and rewrites `packages/nextjs/contracts/deployedContracts.ts`. There is no local chain: Anvil has none of Hedera's system contracts, so the vault only runs on Hedera, and the tests use mocks of them instead. The scaffold's `foundry:chain` and `--network localhost` still exist from the base template but don't apply here.
+This deploys `OrderVault` with its four libraries (`MarketGuard`, `MarketRegistry`, `OrderCollection`, `Settlement`), creates the NFT collection, lists both markets, deploys and registers the three order types (limit 0, stop 1, trailing stop 2), deploys `OrderVaultLens`, and rewrites `packages/nextjs/contracts/deployedContracts.ts`. There is no local chain: Anvil has none of Hedera's system contracts, so the vault only runs on Hedera, and the tests use mocks of them instead. The scaffold's `foundry:chain` and `--network localhost` still exist from the base template but don't apply here.
 
 ## Configuration
 
@@ -122,29 +122,44 @@ The defaults work out of the box. To override the frontend's, copy `packages/nex
 | --- | --- | --- | --- |
 | `NEXT_PUBLIC_HEDERA_TESTNET_RPC_URL` | `packages/nextjs/.env.local` | `https://testnet.hashio.io/api` | Wallet reads and transactions |
 | `NEXT_PUBLIC_MIRROR_NODE_URL` | `packages/nextjs/.env.local` | `https://testnet.mirrornode.hedera.com` | Order history, NFTs, associations, lag |
-| `NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID` | `packages/nextjs/.env.local` | scaffold's shared id | WalletConnect; get your own for production |
+| `NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID` | `packages/nextjs/.env.local`, or your host's environment | scaffold's shared id | WalletConnect QR for mobile wallets; set your own before you deploy (below) |
 | `HEDERA_RPC_URL` | `packages/foundry/.env` | `https://testnet.hashio.io/api` | The `hedera_testnet` endpoint in `foundry.toml`: fork tests and `yarn foundry:pool-gap` |
 | `FORK_TESTS` | shell | unset | `true` runs the guard fork tests against live testnet |
+
+**WalletConnect project id.** Injected wallets (MetaMask, Rabby, HashPack in EVM mode) need no configuration. The
+WalletConnect QR, for mobile wallets, uses a project id: without one the app falls back to the scaffold's shared
+id, which is fine on `localhost` but is shared by every scaffold app and can be restricted to its owner's domains,
+so the QR may fail on yours. Before you deploy:
+
+1. Create a free project at [cloud.reown.com](https://cloud.reown.com) (WalletConnect Cloud) and copy its project id.
+2. Add your site's domains to the project's allowed domains (for Vercel, the production domain and, if you use
+   previews, the preview domain pattern).
+3. Set `NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID`: in `packages/nextjs/.env.local` for local builds, or on Vercel under
+   Project → Settings → Environment Variables (Production and Preview), then redeploy. `NEXT_PUBLIC_` values are
+   built into the bundle, so a change needs a new build.
+
+The id is public by design (it ships in the bundle), but keep it out of the repo, so forks of your app don't spend
+your quota. This repo commits none; the demo at limit-orders-demo.0xo.in sets its own on Vercel.
 
 Deploys sign with a Foundry keystore, so no private key goes in any file.
 
 ## What an order costs
 
-Hedera charges a fixed fee to schedule a contract call: about 1.56 HBAR (≈ $0.12 on 2026-09-29; Hedera sets the `ScheduleCreate` and inner `ContractCall` fees in USD, plus a 20% system-contract surcharge, so the HBAR figure moves with the exchange rate). That is 89% of a check, whatever the gas limit or delay. So the vault saves money the only way it can, by running fewer sweeps: each one waits about as long as the price needs to reach the nearest trigger.
+Hedera charges a fixed fee to schedule a contract call: about 1.17 HBAR (≈ $0.12 on 2026-10-01; Hedera sets the `ScheduleCreate` and inner `ContractCall` fees in USD, plus a 20% system-contract surcharge, so the HBAR figure moves with the exchange rate). That is 81% of a check, whatever the gas limit or delay. So the vault saves money the only way it can, by running fewer sweeps: each one waits about as long as the price needs to reach the nearest trigger.
 
 | Market | Checks at most every | at least every | assumed fastest move |
 | --- | --- | --- | --- |
 | HBAR / USDC | 5 min | 6 h | 2.5% an hour |
 | DAI / USDC | 5 min | 6 h | 0.25% an hour |
 
-| Cost, read from the vault (testnet rate, 1 HBAR = 7.7 ¢) | HBAR |
+| Cost, read from the lens (2026-10-01, 1 HBAR = 10.4 ¢) | HBAR |
 | --- | --- |
-| One check, the only order in its market | 1.8977 |
-| One check shared by 2 / 5 / 20 orders | 0.9849 / 0.4372 / 0.1634 |
-| Reserve every order keeps for its fill and last check (HBAR sell / token sell) | 0.8768 / 1.2371 |
-| Minimum budget | 12.2633 / 12.6236 |
+| One check, the only order in its market | 1.4363 |
+| One check shared by 2 / 5 / 20 orders | 0.7475 / 0.3342 / 0.1276 |
+| Reserve every order keeps for its fill and last check (HBAR sell / token sell) | 0.6730 / 0.9440 |
+| Minimum budget | 9.2905 / 9.5615 |
 
-A market with a single order costs 7.6 to 22.8 HBAR a day depending on how far the trigger is, instead of 546 HBAR a day when it checked every 5 minutes. The Trade page sizes the budget to cover the order until it expires and shows the price of each expiry. Orders in the same market split the fixed part. Unused budget is refunded. The full model, with the measured gas per segment, is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#what-it-costs).
+A market with a single order costs 5.7 to 17.2 HBAR a day depending on how far the trigger is, instead of 414 HBAR a day when it checked every 5 minutes. The HBAR figures move with the exchange rate; `node scripts/cost-figures.mjs` prints today's from the live lens. The Trade page sizes the budget to cover the order until it expires and shows the price of each expiry. Orders in the same market split the fixed part. Unused budget is refunded. The full model, with the measured gas per segment, is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#what-it-costs).
 
 The trade-off: a price that moves faster than the assumed rate is noticed late. The fill is still priced from Chainlink at the moment it happens and still guarded, and anyone can call `executeOrder(id)` or `sweep(market, 0)` to check sooner at their own gas cost.
 

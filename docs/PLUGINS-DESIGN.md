@@ -176,8 +176,9 @@ A trailing stop (sell side) rides the price up and fires on a pullback:
   peak rises, the vault stores it and emits `OrderStateUpdated(orderId, peak)`; otherwise nothing is written.
 - **Trail** is `typeParam` in bps (e.g. 200 = 2%), bounded `[MIN_TRAIL_BPS, MAX_TRAIL_BPS]` = 50–5,000 (0.5%–50%)
   at `validate`.
-- **Seed:** the peak starts at the price at the first evaluation (placement), so the first trigger is
-  `price × (1 − trail)`.
+- **Seed:** placement stores no state; the first scheduled check sets the peak to that check's price (one
+  `OrderStateUpdated`, shown as "Peak set to …" in the order trail), so the first trigger is `price × (1 − trail)`.
+  Every later rise is a "Peak raised to …" row.
 - **Sell side only.** The buy-side mirror (track the trough, fire on a rise) is the same contract with `min` for
   `max`; it is left out of v1.1 to keep the shipped types small and fully tested.
 
@@ -217,8 +218,8 @@ delegatecalls). A trailing stop's first check stores its peak (+23,800 over a li
 the peak +6,600, one that doesn't +2,200.
 
 `MarketConfig.costs()` adds these to the testnet calibration, rounded up: `sweepBaseGas` 100,000, `checkGas`
-65,000, fills 455,000 / 755,000, `idleSweepGas` 96,000. The fixed ~1.56 HBAR `scheduleCall` fee (≈ $0.12 on
-2026-09-29) still dominates a check, so what an order costs moves very little.
+65,000, fills 455,000 / 755,000, `idleSweepGas` 96,000. The fixed ~1.17 HBAR `scheduleCall` fee (≈ $0.12 on
+2026-10-01) still dominates a check, so what an order costs moves very little.
 
 ## Size: v1.0.1 vs v1.1
 

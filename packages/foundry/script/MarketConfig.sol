@@ -29,7 +29,7 @@ library MarketConfig {
     ///         (rounded up): +5k per sweep, +5k per check (the strategy staticcall and the order's type and
     ///         state reads; a trailing stop's peak writes fall inside the safety margin), +5k per fill and +1k
     ///         per empty run. 852 tinycents per gas is Hedera's USD gas price (~110 tinybar at the testnet rate).
-    ///         scheduleGas is the network's fixed ScheduleCreate fee (~1.56 HBAR, ≈ $0.12 on 2026-09-29):
+    ///         scheduleGas is the network's fixed ScheduleCreate fee (~1.17 HBAR, ≈ $0.12 on 2026-10-01):
     ///         1,410,346 gas measured in isolation, the same for any gas limit, delay or calldata size.
     function costs() internal pure returns (Costs memory) {
         return Costs({

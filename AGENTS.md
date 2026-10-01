@@ -51,7 +51,7 @@ Rules that matter when you change the vault:
 - **Errors and events.** Use custom errors and events for every state change. The frontend decodes the order trail from events alone, via `utils/orders/trail.ts`.
 - **HTS calls.** Check the response code. Settlement must never revert a sweep: `_retireNft` and `_pay` report failure through events and credits.
 - **Scheduled calls.** Inside a scheduled call, `msg.sender == tx.origin == address(vault)`. Each schedule carries an epoch; a sweep with a stale epoch must return without touching orders. The vault pays for its own schedules, so every sweep must be charged to some order: routine checks to the batch, the final sweep to parking orders, superseded and empty runs to the order that caused them. The invariant tests enforce solvency and liveness (no funded order goes unchecked, no scheduled sweep reverts).
-- **Scheduling cost.** `scheduleCall` is a fixed network fee of about 1.56 HBAR (≈ $0.12 on 2026-09-29) whatever the gas limit or delay. Reduce cost by scheduling fewer sweeps (`SweepParams`: `minInterval`, `maxInterval`, `maxMoveBpsPerHour`), not by tuning gas limits.
+- **Scheduling cost.** `scheduleCall` is a fixed network fee of about 1.17 HBAR (≈ $0.12 on 2026-10-01) whatever the gas limit or delay. Reduce cost by scheduling fewer sweeps (`SweepParams`: `minInterval`, `maxInterval`, `maxMoveBpsPerHour`), not by tuning gas limits.
 - **Costs.** Change them in `MarketConfig.costs()` and on-chain with `setCosts`. After changing the sweep path, run `forge test --match-contract GasMeasure --isolate -vv` (v1.0.1 vs this vault, each sweep in its own transaction) and fold the difference in. Never hard-code costs in the frontend.
 
 ### After deploy

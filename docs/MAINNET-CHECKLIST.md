@@ -29,8 +29,9 @@ Work through this before putting real value on it. (Skeleton — expanded per st
 
 ## Frontend and ops
 
-- [ ] **Real WalletConnect project id** in `.env.local` (`NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID`) — the shipped
-      one is scaffold's shared id, fine for testnet only.
+- [ ] **Your own WalletConnect project id** (`NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID`, from cloud.reown.com, with
+      your domains allow-listed) in `.env.local` or your host's environment; the fallback is the scaffold's shared
+      id, fine for local testing only. See [Configuration](../README.md#configuration).
 - [ ] **Mainnet RPC and mirror node** URLs in the frontend env, and a relay you trust for signing.
 - [ ] **Monitoring.** Watch `SweepScheduleFailed` / `Stalled` markets and low order budgets, and have a way to
       call `restartSweep` / top up if a market stalls (anyone can, but someone should be watching).

@@ -17,7 +17,7 @@ is the guard doing its job, not a bug. The DAI/USDC pool tracks Chainlink (~23 b
 On a mainnet fork the HBAR/USDC pool is arbitraged and the same guard opens (`yarn foundry:fork-guard`).
 
 **What does an order cost?**
-A fixed `scheduleCall` network fee of about 1.56 HBAR (≈ $0.12 on 2026-09-29) per scheduled check dominates; gas is the rest. You prepay a
+A fixed `scheduleCall` network fee of about 1.17 HBAR (≈ $0.12 on 2026-10-01) per scheduled check dominates; gas is the rest. You prepay a
 budget in HBAR sized to the order's expected number of checks; unused budget is refunded when the order fills or
 is cancelled. The Trade page shows the budget and an upper-bound fee before you place. See "What an order costs"
 in the README.
