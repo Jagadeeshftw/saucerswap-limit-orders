@@ -1,5 +1,9 @@
 # saucerswap-limit-orders
 
+[![Docs](https://img.shields.io/badge/docs-limit--orders.0xo.in-6d4aff)](https://limit-orders.0xo.in)
+
+**Documentation: [limit-orders.0xo.in](https://limit-orders.0xo.in)** (mirror: [saucerswap-limit-orders-docs.vercel.app](https://saucerswap-limit-orders-docs.vercel.app)).
+
 Limit and stop orders for SaucerSwap V2 on Hedera, with no keeper bot. A [Scaffold-HBAR](https://docs.hedera.com/solutions/tools/scaffold-hbar) template: Foundry contracts and a Next.js frontend for Hedera testnet.
 
 ![Placing a stop-loss in the UI and watching the Hedera Schedule Service fill it, with the order's mirror-node trail](docs/demo.gif)
@@ -262,8 +266,7 @@ The e2e suite runs a production build against a mocked relay, mirror node and in
 - [docs/FAQ.md](docs/FAQ.md) — the questions a first-time reader asks.
 - [docs/MAINNET-CHECKLIST.md](docs/MAINNET-CHECKLIST.md) — what to change before putting real value on it.
 
-A full documentation site is published separately at the address in the submission; it is single-sourced from
-these files.
+The documentation site, [limit-orders.0xo.in](https://limit-orders.0xo.in), is single-sourced from these files.
 
 ## Layout
 
