@@ -19,11 +19,7 @@ contract TrailingStopType is IOrderType {
     uint128 public constant MAX_TRAIL_BPS = 5000; // 50%
 
     /// @dev Sell-side only, with the trail in [MIN_TRAIL_BPS, MAX_TRAIL_BPS].
-    function validate(Side side, uint128 amountIn, uint128 param, uint16, uint40, uint40)
-        external
-        pure
-        returns (bool)
-    {
+    function validate(Side side, uint128 amountIn, uint128 param, uint16, uint40, uint40) external pure returns (bool) {
         return side == Side.SellBase && amountIn > 0 && param >= MIN_TRAIL_BPS && param <= MAX_TRAIL_BPS;
     }
 

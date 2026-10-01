@@ -31,16 +31,17 @@ library Settlement {
         uint256 amountIn,
         uint256 minOut
     ) public returns (uint256 amountOut) {
-        ISaucerSwapV2Router.ExactInputSingleParams memory params = ISaucerSwapV2Router.ExactInputSingleParams({
-            tokenIn: tokenIn == HBAR ? whbar : tokenIn,
-            tokenOut: tokenOut == HBAR ? whbar : tokenOut,
-            fee: poolFee,
-            recipient: tokenOut == HBAR ? address(router) : address(this),
-            deadline: block.timestamp + SWAP_DEADLINE,
-            amountIn: amountIn,
-            amountOutMinimum: minOut,
-            sqrtPriceLimitX96: 0
-        });
+        ISaucerSwapV2Router.ExactInputSingleParams memory params =
+            ISaucerSwapV2Router.ExactInputSingleParams({
+                tokenIn: tokenIn == HBAR ? whbar : tokenIn,
+                tokenOut: tokenOut == HBAR ? whbar : tokenOut,
+                fee: poolFee,
+                recipient: tokenOut == HBAR ? address(router) : address(this),
+                deadline: block.timestamp + SWAP_DEADLINE,
+                amountIn: amountIn,
+                amountOutMinimum: minOut,
+                sqrtPriceLimitX96: 0
+            });
         if (tokenIn != HBAR) {
             if (!IERC20(tokenIn).approve(address(router), amountIn)) revert TransferRejected();
         }

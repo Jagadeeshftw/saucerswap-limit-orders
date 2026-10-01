@@ -45,9 +45,7 @@ contract OrderVaultTest is OrderVaultBase {
         OrderVault fresh = new OrderVault(owner, vault.ROUTER(), address(whbar), MarketConfig.costs());
         hts.forceCreateCode(7);
         vm.prank(owner);
-        vm.expectRevert(
-            abi.encodeWithSelector(HtsError.selector, HtsOperation.CreateCollection, int64(7))
-        );
+        vm.expectRevert(abi.encodeWithSelector(HtsError.selector, HtsOperation.CreateCollection, int64(7)));
         fresh.initialize("x", "x");
     }
 
@@ -176,16 +174,7 @@ contract OrderVaultTest is OrderVaultBase {
         PlaceParams memory p = _params(HBAR_MARKET, Side.SellBase, 250e8);
         vm.expectEmit(address(vault));
         emit OrderVault.OrderPlaced(
-            1,
-            HBAR_MARKET,
-            alice,
-            Side.SellBase,
-            LIMIT,
-            250e8,
-            ABOVE_MARKET,
-            50,
-            block.timestamp + 7 days,
-            budget
+            1, HBAR_MARKET, alice, Side.SellBase, LIMIT, 250e8, ABOVE_MARKET, 50, block.timestamp + 7 days, budget
         );
         vm.prank(alice);
         vault.placeOrder{ value: 250e8 + budget }(p);
@@ -267,9 +256,7 @@ contract OrderVaultTest is OrderVaultBase {
         nft.setAssociated(alice, false);
         PlaceParams memory p = _params(HBAR_MARKET, Side.SellBase, 250e8);
         vm.prank(alice);
-        vm.expectRevert(
-            abi.encodeWithSelector(HtsError.selector, HtsOperation.TransferNft, int64(184))
-        );
+        vm.expectRevert(abi.encodeWithSelector(HtsError.selector, HtsOperation.TransferNft, int64(184)));
         vault.placeOrder{ value: 300e8 }(p);
     }
 

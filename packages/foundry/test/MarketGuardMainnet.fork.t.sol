@@ -43,14 +43,20 @@ contract MarketGuardMainnetForkTest is Test {
             vm.skip(true);
             return;
         }
-        try vm.createSelectFork("hedera_mainnet") returns (uint256) {
-            // reachable — run the test body below
-        } catch {
+        if (!_forkMainnet()) {
             emit log("skipped: could not reach the Hedera mainnet RPC (hedera_mainnet)");
             vm.skip(true);
             return;
         }
         _;
+    }
+
+    function _forkMainnet() internal returns (bool) {
+        try vm.createSelectFork("hedera_mainnet") returns (uint256) {
+            return true;
+        } catch {
+            return false;
+        }
     }
 
     /// @dev A generous but meaningful guard: a well-arbitraged pool sits within ~1% of Chainlink, so a 3% band

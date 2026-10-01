@@ -318,11 +318,11 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
         if (p.amountIn == 0) revert InvalidAmount();
         if (p.orderType >= orderTypeCount) revert UnknownOrderType(p.orderType);
         if (!orderTypeActive[p.orderType]) revert OrderTypeInactive(p.orderType);
-        if (
-            !IOrderType(orderTypes[p.orderType]).validate(
-                p.side, p.amountIn, p.typeParam, p.slippageBps, p.expiry, block.timestamp.toUint40()
-            )
-        ) revert InvalidOrderParams();
+        IOrderType impl = IOrderType(orderTypes[p.orderType]);
+        uint40 now_ = block.timestamp.toUint40();
+        if (!impl.validate(p.side, p.amountIn, p.typeParam, p.slippageBps, p.expiry, now_)) {
+            revert InvalidOrderParams();
+        }
         uint256 minSlippage = uint256(m.poolFee) / 100;
         if (p.slippageBps <= minSlippage || p.slippageBps > m.guard.maxSlippageBps) {
             revert InvalidSlippage(p.slippageBps, minSlippage + 1, m.guard.maxSlippageBps);
@@ -632,8 +632,7 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
         Market storage m = _market(marketId);
         GuardReading memory g = guardReading(marketId);
         if (g.oraclePrice == 0 || orderType >= orderTypeCount) return m.sweep.minInterval;
-        (uint256 distance,, bool ok) =
-            _staticEvaluate(orderType, side, typeParam, bytes32(0), g.oraclePrice);
+        (uint256 distance,, bool ok) = _staticEvaluate(orderType, side, typeParam, bytes32(0), g.oraclePrice);
         return ok ? _delayFor(m, distance, expiry) : m.sweep.minInterval;
     }
 
