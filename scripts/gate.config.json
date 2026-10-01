@@ -90,6 +90,30 @@
       "description": "The guard holds order #4 again, after a doubled back-off wait"
     },
     {
+      "timestamp": "1790877091.094430922",
+      "scheduled": true,
+      "contract": "0xc265045c65d0114109072d60b3a60231427a06a9",
+      "event": "BudgetExhausted",
+      "topic0": "0xe3bbed9ba4ea66661cbf21701baf30a52ea330ce76f1be3ca59360048ecb1894",
+      "description": "A scheduled sweep parks order #6 when its budget runs down to the reserve"
+    },
+    {
+      "timestamp": "1790885289.214228104",
+      "scheduled": false,
+      "contract": "0xc265045c65d0114109072d60b3a60231427a06a9",
+      "event": "BudgetToppedUp",
+      "topic0": "0x908e184df46f5e7e1ef7f34f02b3f94a910f9d1e67c2fbdf158b549758370acb",
+      "description": "A top-up revives parked order #6 and brings the market's next check forward"
+    },
+    {
+      "timestamp": "1790885588.014226200",
+      "scheduled": true,
+      "contract": "0xc265045c65d0114109072d60b3a60231427a06a9",
+      "event": "OrderChecked",
+      "topic0": "0x1a7dbf431965c6067a9b8aea714120177a1e0d555a6dd0078b62e17d9ae1847b",
+      "description": "Checks resume: the next scheduled sweep charges the revived order #6 again"
+    },
+    {
       "timestamp": "1790872335.349111575",
       "scheduled": false,
       "contract": "0xc265045c65d0114109072d60b3a60231427a06a9",
