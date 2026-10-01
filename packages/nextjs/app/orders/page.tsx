@@ -90,9 +90,11 @@ const OrdersPage = () => {
     <div className="mx-auto grid w-full max-w-6xl gap-4 px-4 py-6 sm:py-8">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h1 className="m-0 text-2xl font-bold">My orders</h1>
-        <span className="text-sm text-base-content/70" data-testid="orders-summary">
-          {counts.all} {counts.all === 1 ? "order" : "orders"} · {counts.open} open
-        </span>
+        {!isLoading && (
+          <span className="text-sm text-base-content/70" data-testid="orders-summary">
+            {counts.all} {counts.all === 1 ? "order" : "orders"} · {counts.open} open
+          </span>
+        )}
       </div>
       <MirrorLagNotice />
 

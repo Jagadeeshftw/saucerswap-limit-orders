@@ -1,6 +1,6 @@
 import { type Abi, decodeErrorResult, decodeEventLog } from "viem";
 import type { MirrorLog } from "~~/services/mirror";
-import { GuardState, OrderType, type Side, orderKind, trailingTrigger } from "~~/utils/orders/orders";
+import { GuardState, OrderType, type Side, orderKind, paramText, trailingTrigger } from "~~/utils/orders/orders";
 import { dateFromConsensus, formatAmount, formatBps, formatHbar, formatPrice } from "~~/utils/orders/units";
 
 export type TokenMeta = { symbol: string; decimals: number };
@@ -161,10 +161,7 @@ const describe = (
   switch (eventName) {
     case "OrderPlaced": {
       const kind = orderKind(order.side, order.orderType).toLowerCase();
-      const param =
-        order.orderType === OrderType.Trailing
-          ? `${formatBps(Number(args.typeParam as bigint))} trail`
-          : `trigger ${quote(args.typeParam as bigint)}`;
+      const param = paramText(order.orderType, args.typeParam as bigint, order.quote);
       return {
         tone: "primary",
         title: `Placed: ${inAmount(args.amountIn)} escrowed`,

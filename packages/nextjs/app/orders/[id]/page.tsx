@@ -13,15 +13,7 @@ import { vault } from "~~/hooks/orders/useVault";
 import { useVaultTx } from "~~/hooks/orders/useVaultTx";
 import { durationText } from "~~/utils/orders/budget";
 import { GAS_LIMIT } from "~~/utils/orders/gas";
-import {
-  OrderType,
-  comparatorText,
-  describeOrder,
-  directionOf,
-  isOpen,
-  peakOf,
-  trailingTrigger,
-} from "~~/utils/orders/orders";
+import { OrderType, describeOrder, fireCondition, isOpen, peakOf, trailingTrigger } from "~~/utils/orders/orders";
 import type { TrailEntry } from "~~/utils/orders/trail";
 import { formatAmount, formatBps, formatHbar, formatPrice, parseAmount, tinybarToWeibar } from "~~/utils/orders/units";
 
@@ -110,17 +102,7 @@ const OrderDetail = () => {
             order.market.base.symbol,
             order.market.quote.symbol,
           )}{" "}
-          {trailing ? (
-            <>
-              with a {formatBps(order.typeParam)} trail: sells when {order.market.base.symbol} falls{" "}
-              {formatBps(order.typeParam)} below the highest price seen at a check
-            </>
-          ) : (
-            <>
-              when {order.market.base.symbol} is {comparatorText(directionOf(order.side, order.orderType))}{" "}
-              {formatPrice(order.typeParam)} {order.market.quote.symbol}
-            </>
-          )}
+          {fireCondition(order, order.market.base.symbol, order.market.quote.symbol)}
         </p>
       </div>
       <MirrorLagNotice />

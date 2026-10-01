@@ -184,6 +184,19 @@ export const triggerFor = (side: Side, kind: OrderKind) => directionOf(side, ord
 
 export const comparatorText = (trigger: Trigger) => (trigger === Trigger.AtOrAbove ? "at or above" : "at or below");
 
+/** The order's parameter as one phrase for the trail: "trigger 1.0000 USDC", or "0.50% trail" for a trailing stop. */
+export const paramText = (orderType: OrderType, typeParam: bigint, quote: string) =>
+  orderType === OrderType.Trailing ? `${formatBps(typeParam)} trail` : `trigger ${formatPrice(typeParam)} ${quote}`;
+
+/** When the order fires, finishing a sentence that starts with describeOrder: "… when DAI is at or below 0.9950 USDC". */
+export const fireCondition = (order: Pick<Order, "side" | "orderType" | "typeParam">, base: string, quote: string) => {
+  if (order.orderType === OrderType.Trailing) {
+    const trail = formatBps(order.typeParam);
+    return `with a ${trail} trail: sells when ${base} falls ${trail} below the highest price seen at a check`;
+  }
+  return `when ${base} is ${comparatorText(directionOf(order.side, order.orderType))} ${formatPrice(order.typeParam)} ${quote}`;
+};
+
 /** The ticket's primary action for each order type, e.g. "Place stop-loss". */
 export const placeLabel = (side: Side, orderType: OrderType) => {
   if (orderType === OrderType.Trailing) return "Place trailing stop";
