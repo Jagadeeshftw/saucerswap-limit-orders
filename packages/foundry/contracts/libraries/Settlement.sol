@@ -3,12 +3,11 @@ pragma solidity ^0.8.28;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IHederaTokenService } from "../interfaces/IHederaTokenService.sol";
-import { IHederaScheduleService } from "../interfaces/IHederaScheduleService.sol";
 import { ISaucerSwapV2Router } from "../interfaces/ISaucerSwapV2.sol";
 import { HtsError, HtsOperation } from "../types/OrderTypes.sol";
 
 /// @title Settlement — the vault's external-interaction layer.
-/// @notice The SaucerSwap swap, the HTS token and order-NFT operations, ERC-20 moves, and the HSS capacity probe.
+/// @notice The SaucerSwap swap, the HTS token and order-NFT operations, and ERC-20 moves.
 ///         It is an external library (its own deployed code, linked like `MarketGuard`/`OrderCollection`), so this
 ///         call-encoding-heavy code lives outside `OrderVault` and the vault stays under the 24 KB limit with room
 ///         to spare. The vault keeps the readable sweep → evaluate → guard → fill flow and calls here only for the
@@ -102,22 +101,5 @@ library Settlement {
     function transferToken(address token, address to, uint256 amount) public returns (bool) {
         (bool ok, bytes memory ret) = token.call(abi.encodeCall(IERC20.transfer, (to, amount)));
         return ok && (ret.length == 0 || abi.decode(ret, (bool)));
-    }
-
-    /// @notice HIP-1215's suggested probe: exponential back-off with PRNG jitter so vaults don't stampede one
-    ///         second. Returns an expiry with capacity for `gasLimit`, or `target` if none is found in `probes`.
-    function findCapacity(IHederaScheduleService hss, uint256 target, uint256 gasLimit, uint256 probes)
-        public
-        view
-        returns (uint256)
-    {
-        if (hss.hasScheduleCapacity(target, gasLimit)) return target;
-        bytes32 seed = bytes32(block.prevrandao);
-        for (uint256 i; i < probes; ++i) {
-            uint256 backoff = 2 ** i;
-            uint256 candidate = target + backoff + (uint256(keccak256(abi.encodePacked(seed, i))) % backoff);
-            if (hss.hasScheduleCapacity(candidate, gasLimit)) return candidate;
-        }
-        return target;
     }
 }

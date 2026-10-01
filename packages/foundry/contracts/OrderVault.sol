@@ -771,8 +771,17 @@ contract OrderVault is Ownable2Step, ReentrancyGuard {
     }
 
     /// @dev HIP-1215's suggested probe: exponential back-off with PRNG jitter so vaults don't stampede one second.
+    ///      Returns an expiry with capacity for `gasLimit`, or `target` if none is found. Inline rather than in a
+    ///      library: every rescheduling sweep runs it, and a library call would add a cold delegatecall each time.
     function _findCapacity(uint256 target, uint256 gasLimit) internal view returns (uint256) {
-        return Settlement.findCapacity(HSS, target, gasLimit, CAPACITY_PROBES);
+        if (HSS.hasScheduleCapacity(target, gasLimit)) return target;
+        bytes32 seed = bytes32(block.prevrandao);
+        for (uint256 i; i < CAPACITY_PROBES; ++i) {
+            uint256 backoff = 2 ** i;
+            uint256 candidate = target + backoff + (uint256(keccak256(abi.encodePacked(seed, i))) % backoff);
+            if (HSS.hasScheduleCapacity(candidate, gasLimit)) return candidate;
+        }
+        return target;
     }
 
     function _sweepIsDead(SweepState storage s) internal view returns (bool) {

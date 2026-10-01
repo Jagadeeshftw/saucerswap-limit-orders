@@ -6,6 +6,7 @@ import { OrderVault } from "../contracts/OrderVault.sol";
 import { PriceMath } from "../contracts/libraries/PriceMath.sol";
 import { Order, PlaceParams, Side, Status, Trigger } from "../contracts/types/OrderTypes.sol";
 import { OrderVaultBase } from "./OrderVaultBase.t.sol";
+import { MarketConfig } from "../script/MarketConfig.sol";
 
 /// @notice Property tests over amounts, decimals, budgets, triggers and execution prices.
 contract OrderVaultFuzzTest is OrderVaultBase {
@@ -155,7 +156,7 @@ contract OrderVaultFuzzTest is OrderVaultBase {
         // Each share rounds its slice of the fixed gas up by at most one gas.
         assertLe(
             share * n,
-            lens.checkCost(HBAR_MARKET) + (n - 1) * _tinybar(60_000) + n * (_tinybar(1) + 1),
+            lens.checkCost(HBAR_MARKET) + (n - 1) * _tinybar(MarketConfig.costs().checkGas) + n * (_tinybar(1) + 1),
             "sharing never costs more than one sweep"
         );
     }
