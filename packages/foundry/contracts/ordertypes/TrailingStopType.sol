@@ -32,7 +32,7 @@ contract TrailingStopType is IOrderType {
         uint256 peak = state == bytes32(0) ? oraclePrice : uint256(state);
         if (oraclePrice > peak) peak = oraclePrice;
         uint256 trigger = (peak * (BPS - param)) / BPS;
-        distanceBps = oraclePrice <= trigger ? 0 : PriceMath.deviationBps(trigger, oraclePrice);
+        distanceBps = oraclePrice <= trigger ? 0 : PriceMath.distanceBps(trigger, oraclePrice);
         newState = bytes32(peak);
     }
 

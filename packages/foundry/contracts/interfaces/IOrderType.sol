@@ -29,7 +29,8 @@ interface IOrderType {
     /// @param state       This order's opaque per-type state (e.g. a trailing peak); zero for a new order.
     /// @param oraclePrice The Chainlink cross price for the market, in the market's price units.
     /// @return distanceBps 0 when the trigger is met (fill now); otherwise how far the price is from the trigger,
-    ///         which the vault turns into the next-check delay.
+    ///         which the vault turns into the next-check delay. Never 0 for an unmet trigger: the vault fills on
+    ///         0, so use `PriceMath.distanceBps`, which rounds a sub-basis-point gap up to 1.
     /// @return newState    The state to persist; the vault writes it only when it differs from `state`.
     function evaluate(Side side, uint128 param, bytes32 state, uint256 oraclePrice)
         external

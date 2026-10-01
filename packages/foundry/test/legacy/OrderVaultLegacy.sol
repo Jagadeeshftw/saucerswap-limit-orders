@@ -54,7 +54,10 @@ struct PlaceParams {
     uint40 expiry;
 }
 
-/// @title OrderVault
+/// @title OrderVault (v1.0.1 reference copy for the differential test)
+/// @notice The vault as tagged v1.0.1, kept so `OrderVault.differential.t.sol` can compare the refactored vault
+///         against it. One deliberate change: `_distance` uses `PriceMath.distanceBps`, the v1.1 fix that stops a
+///         price a fraction of a basis point short of its trigger reading as met. Everything else is v1.0.1.
 /// @notice Limit and stop orders that execute on SaucerSwap V2 with no off-chain keeper.
 /// @dev Each order is an HTS NFT minted by this vault; whoever holds it owns the order.
 ///      Each market runs one self-rescheduling sweep through the Hedera Schedule Service,
@@ -726,7 +729,8 @@ contract OrderVaultLegacy is Ownable2Step, ReentrancyGuard {
     /// @dev How far `price` still has to move to meet the trigger, in bps of `price`; 0 once it is met.
     function _distance(Trigger trigger, uint256 triggerPrice, uint256 price) internal pure returns (uint256) {
         if (trigger == Trigger.AtOrAbove ? price >= triggerPrice : price <= triggerPrice) return 0;
-        return PriceMath.deviationBps(triggerPrice, price);
+        // v1.1 fix applied to the reference too (see the file header): an unmet trigger is never distance 0.
+        return PriceMath.distanceBps(triggerPrice, price);
     }
 
     function _openOrder(uint256 orderId) internal view returns (Order storage o) {

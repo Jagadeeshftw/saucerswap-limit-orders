@@ -95,6 +95,14 @@ library PriceMath {
         return Math.mulDiv(diff, BPS, b);
     }
 
+    /// @notice How far `price` is from a trigger it has NOT met, in bps of `price`, and never less than 1. An order
+    ///         type returns 0 only for a met trigger, because the vault fills on 0: `deviationBps` rounds down, so a
+    ///         price a fraction of a basis point short of its trigger would otherwise read as met and fill early.
+    function distanceBps(uint256 trigger, uint256 price) internal pure returns (uint256) {
+        uint256 d = deviationBps(trigger, price);
+        return d == 0 ? 1 : d;
+    }
+
     /// @notice `amount` reduced by `bps` basis points, rounded down.
     function lessBps(uint256 amount, uint256 bps) internal pure returns (uint256) {
         return Math.mulDiv(amount, BPS - bps, BPS);

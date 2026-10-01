@@ -5,6 +5,8 @@ import { OrderVault } from "../contracts/OrderVault.sol";
 import { OrderVaultBase } from "./OrderVaultBase.t.sol";
 import { IOrderType } from "../contracts/interfaces/IOrderType.sol";
 import { TrailingStopType } from "../contracts/ordertypes/TrailingStopType.sol";
+import { LimitOrderType } from "../contracts/ordertypes/LimitOrderType.sol";
+import { StopOrderType } from "../contracts/ordertypes/StopOrderType.sol";
 import { PlaceParams, Side, Status } from "../contracts/types/OrderTypes.sol";
 
 /// A strategy that always says "fill now" and asks for no slippage protection — the worst-case plug-in.
@@ -145,6 +147,8 @@ contract OrderVaultPluginsTest is OrderVaultBase {
 
     // 4. Trailing stop: the trigger never moves down, and a fill only happens at or below peak x (1 - trail).
     TrailingStopType internal trailType = new TrailingStopType();
+    LimitOrderType internal limitType = new LimitOrderType();
+    StopOrderType internal stopType = new StopOrderType();
 
     function testFuzz_trailingStop_triggerNeverFallsAndFiresBelowPeak(uint128 trailSeed, uint256[8] memory priceSeed)
         public
@@ -170,5 +174,27 @@ contract OrderVaultPluginsTest is OrderVaultBase {
             if (distance == 0) assertLe(price, trigger, "fires only at or below peak x (1 - trail)");
             state = next;
         }
+    }
+
+    /// @notice A price a fraction of a basis point short of its trigger is not "met": every shipped type reports a
+    ///         distance of at least 1, so the vault (which fills on 0) never fills early. Found by the trailing fuzz.
+    function testFuzz_unmetTriggerIsNeverDistanceZero(uint256 trigger, uint256 gapPpm) public view {
+        trigger = bound(trigger, 1e6, 1e12);
+        gapPpm = bound(gapPpm, 1, 99); // under 1 bp of the price
+        uint256 above = trigger + (trigger * gapPpm) / 1e6 + 1;
+        uint256 below = trigger - (trigger * gapPpm) / 1e6 - 1;
+        (uint256 d,) = limitType.evaluate(Side.SellBase, uint128(trigger), bytes32(0), below); // limit sell, price under
+        assertGt(d, 0, "limit sell");
+        (d,) = limitType.evaluate(Side.BuyBase, uint128(trigger), bytes32(0), above); // limit buy, price over
+        assertGt(d, 0, "limit buy");
+        (d,) = stopType.evaluate(Side.SellBase, uint128(trigger), bytes32(0), above); // stop-loss, price over
+        assertGt(d, 0, "stop-loss");
+        (d,) = stopType.evaluate(Side.BuyBase, uint128(trigger), bytes32(0), below); // stop-buy, price under
+        assertGt(d, 0, "stop-buy");
+        // trailing: peak `p`, 1% trail, price just above p x 0.99
+        uint256 p = trigger * 100 / 99;
+        uint256 trig = (p * 9_900) / 10_000;
+        (d,) = trailType.evaluate(Side.SellBase, 100, bytes32(p), trig + (trig * gapPpm) / 1e6 + 1);
+        assertGt(d, 0, "trailing");
     }
 }

@@ -20,7 +20,7 @@ contract LimitOrderType is IOrderType {
     {
         // A limit sell fires at or above its trigger; a limit buy fires at or below it.
         bool met = side == Side.SellBase ? oraclePrice >= param : oraclePrice <= param;
-        distanceBps = met ? 0 : PriceMath.deviationBps(param, oraclePrice);
+        distanceBps = met ? 0 : PriceMath.distanceBps(param, oraclePrice);
         newState = state; // stateless: unchanged, so the vault writes nothing
     }
 

@@ -20,7 +20,7 @@ contract StopOrderType is IOrderType {
     {
         // A stop-loss (sell) fires at or below its trigger; a stop-buy fires at or above it.
         bool met = side == Side.SellBase ? oraclePrice <= param : oraclePrice >= param;
-        distanceBps = met ? 0 : PriceMath.deviationBps(param, oraclePrice);
+        distanceBps = met ? 0 : PriceMath.distanceBps(param, oraclePrice);
         newState = state;
     }
 
