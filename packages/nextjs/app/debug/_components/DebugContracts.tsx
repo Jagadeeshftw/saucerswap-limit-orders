@@ -10,13 +10,17 @@ import { useAllContracts } from "~~/utils/scaffold-hbar/contractsData";
 
 const selectedContractStorageKey = "scaffoldEth2.selectedContract";
 
+/** The vault opens first, then its read-only lens; the order-type plug-ins follow alphabetically. */
+const FIRST = ["OrderVault", "OrderVaultLens"];
+const rank = (name: string) => (FIRST.includes(name) ? FIRST.indexOf(name) : FIRST.length);
+
 export function DebugContracts() {
   const contractsData = useAllContracts();
   const contractNames = useMemo(
     () =>
-      Object.keys(contractsData).sort((a, b) => {
-        return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
-      }) as ContractName[],
+      Object.keys(contractsData).sort(
+        (a, b) => rank(a) - rank(b) || a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }),
+      ) as ContractName[],
     [contractsData],
   );
 

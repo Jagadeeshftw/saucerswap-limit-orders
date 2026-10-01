@@ -21,16 +21,19 @@ const TradePage = () => {
   }
 
   return (
-    <div className="mx-auto grid w-full max-w-6xl gap-5 px-4 py-6 sm:py-8">
-      <nav className="flex flex-wrap gap-1.5" aria-label="Markets">
+    <div className="mx-auto grid w-full max-w-6xl gap-4 px-4 py-5 sm:gap-5 sm:py-8">
+      <nav
+        className="flex w-fit max-w-full flex-wrap gap-1 rounded-full border border-base-300 bg-base-100 p-1"
+        aria-label="Markets"
+      >
         {markets.map(m => (
           <Link
             key={m.id}
             href={`/?market=${m.id}`}
             aria-current={m.id === market.id ? "page" : undefined}
             data-testid={`market-${m.id}`}
-            className={`rounded-full border px-3 py-1 text-sm font-semibold ${
-              m.id === market.id ? "border-primary bg-primary/10 text-primary" : "border-base-300 text-base-content/70"
+            className={`rounded-full px-3.5 py-1.5 text-sm font-semibold ${
+              m.id === market.id ? "bg-primary/10 text-primary" : "text-base-content/70 hover:text-base-content"
             }`}
           >
             {m.base.symbol} / {m.quote.symbol}

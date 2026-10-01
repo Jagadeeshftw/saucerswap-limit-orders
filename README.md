@@ -249,7 +249,7 @@ The e2e suite runs a production build against a mocked relay, mirror node and in
 | "Associate the order NFT collection" | Your account has no free auto-association slot. Press Associate (HIP-719), then place the order. |
 | A fill credited instead of paid | You weren't associated with the output token when it filled. Associate it, then `claim(token)`. |
 | Budget empty | The order only has its reserve left. Top it up on the order page; checks resume. |
-| Held by guard | The pool is too far from Chainlink or a feed is stale. The order waits and retries with back-off. See `yarn foundry:pool-gap`. |
+| Held (tooltip: "Held by guard") | The trigger is met, but the pool is too far from Chainlink or a feed is stale. The order waits and retries with back-off. See `yarn foundry:pool-gap`. |
 | Checks stopped | Press Restart checks (anyone can), or top up an order. |
 | "Status may be up to N s behind" | The mirror node trails consensus. Order state from the contract is current; the trail catches up. |
 | HBAR amounts off by 10^10 in your own code | Wallets send HBAR as 18-decimal weibar in `value`; the contracts count 8-decimal tinybar. Convert only through `utils/orders/units.ts`. |
