@@ -299,6 +299,10 @@ contract OrderVaultDifferentialTest is StdInvariant, Test {
         bytes4[] memory selectors = new bytes4[](1);
         selectors[0] = DifferentialHandler.step.selector;
         targetSelector(FuzzSelector({ addr: address(handler), selectors: selectors }));
+        // The handler pranks every actor itself, so the fuzzer's sender only matters for gas: a sender that is a
+        // contract either vault touches (e.g. the mocks etched at 0x167/0x168) is warm in its own call and would
+        // skew the gas comparison. Newer Foundry fuzzers pick such senders, so pin one that nothing touches.
+        targetSender(makeAddr("differential-caller"));
     }
 
     /// forge-config: default.gas_limit = 9223372036854775807

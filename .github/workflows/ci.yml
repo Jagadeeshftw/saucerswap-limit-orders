@@ -18,7 +18,10 @@ jobs:
         with:
           node-version: 24
 
+      # Pinned to the Foundry release the test suite is validated on; see README "Prerequisites".
       - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.5.0
 
       - name: Enable Corepack
         run: corepack enable

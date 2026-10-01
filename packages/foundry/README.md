@@ -18,7 +18,7 @@ yarn foundry:test          # from the repo root; or `forge test` here
 yarn foundry:test:fork     # FORK_TESTS=true, reads the real testnet pools and Chainlink feeds
 ```
 
-- `test/OrderVault.t.sol` is the main unit suite: placement, sweeps, fills, guard holds, budgets, expiry, cancel, top-up, claims and admin.
+- `test/OrderVault.t.sol` and `test/OrderVault.sweep.t.sol` are the main unit suites: admin, costs, placement, cancel and top-up in the first; sweeps, fills, guard holds, budgets, expiry, manual execution and payouts in the second (split so neither test contract outgrows solc's jump-tag space under via-IR).
 - `test/OrderVault.edges.t.sol` covers the scheduling policy (distance-based waits, back-off, superseded sweeps, capacity), stalled sweeps, parameter bounds and every failure path (HTS mint, wipe and associate failures, tokens that return false, a down exchange rate).
 - `test/OrderVault.fuzz.t.sol` has property tests over amounts, decimals, budgets, triggers and execution prices.
 - `test/PriceMath.t.sol` has unit and fuzz tests for the tick and price math.
