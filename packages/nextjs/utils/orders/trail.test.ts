@@ -2,13 +2,15 @@ import { type Abi, encodeAbiParameters, encodeEventTopics } from "viem";
 import { describe, expect, it } from "vitest";
 import deployedContracts from "~~/contracts/deployedContracts";
 import type { MirrorLog } from "~~/services/mirror";
-import heldOrderLogs from "~~/utils/orders/__fixtures__/order-3-held-logs.json";
-import filledOrderLogs from "~~/utils/orders/__fixtures__/order-5-logs.json";
+import filledOrderLogs from "~~/utils/orders/__fixtures__/order-2-filled-logs.json";
+import heldOrderLogs from "~~/utils/orders/__fixtures__/order-4-held-logs.json";
 import { OrderType, Side } from "~~/utils/orders/orders";
 import { buildTrail, decodeOrderLogs } from "~~/utils/orders/trail";
 
-// Real mirror-node logs of the testnet vault 0.0.10792085 (2026-09-30): order #5, filled by a scheduled sweep, and
-// order #3 through its first two scheduled checks, both held by the guard (it was cancelled afterwards).
+// Real mirror-node logs of the v1.1 testnet vault 0.0.10809822 (2026-10-01), exactly as a topic1 query returns them:
+// order #2, a DAI stop-loss placed with its trigger met, which brought the market's next check forward and was
+// filled by that scheduled sweep; and order #4, an HBAR limit sell, through its two scheduled checks held by the
+// guard (its later cancel is left out).
 const abi = deployedContracts[296].OrderVault.abi as Abi;
 const DAI = { symbol: "DAI", decimals: 8 };
 const USDC = { symbol: "USDC", decimals: 6 };
@@ -19,13 +21,15 @@ const HBAR_LIMIT = { side: Side.SellBase, orderType: OrderType.Limit, typeParam:
 describe("decodeOrderLogs", () => {
   it("keeps the order's own events", () => {
     const names = decodeOrderLogs(abi, filledOrderLogs as MirrorLog[]).map(e => e.eventName);
-    expect(names).toEqual(["OrderPlaced", "OrderChecked", "OrderFilled"]);
+    expect(names).toEqual(["OrderPlaced", "SweepBroughtForward", "OrderChecked", "OrderFilled"]);
   });
 
   it("drops sweep and market events that share topic1 with the order id", () => {
+    // Order #2 lives in market 2, so the real query also returned market 2's SweepScheduled and SweepExecuted.
+    expect(filledOrderLogs.length).toBe(7);
     const marketLevel = {
       ...(filledOrderLogs[0] as MirrorLog),
-      // SweepScheduled(marketId, ...) for market 5 would carry the same topic1 as order #5.
+      // SweepScheduled(marketId, ...) for market 2 carries the same topic1 as order #2.
       topics: [
         "0x3bafc8a0342d1904e9fc16d0a85040ad804014f5ca02e351a4c038052a50dc99",
         (filledOrderLogs[0] as MirrorLog).topics[1],
@@ -40,10 +44,11 @@ describe("decodeOrderLogs", () => {
 describe("buildTrail", () => {
   it("tells the story of the DAI order the Schedule Service filled", () => {
     const trail = buildTrail(abi, filledOrderLogs as MirrorLog[], DAI, USDC, DAI_STOP);
-    expect(trail[0].title).toBe("Filled: 0.5 DAI for 0.5008 USDC");
+    expect(trail[0].title).toBe("Filled: 0.1 DAI for 0.1001 USDC");
     expect(trail[0].tone).toBe("ok");
-    expect(trail[0].detail).toContain("Check 1 charged");
-    expect(trail.at(-1)?.title).toBe("Placed: 0.5 DAI escrowed");
+    expect(trail[0].detail).toContain("Check 1 charged 0.7474 HBAR");
+    expect(trail[1].title).toBe("Brought the next check forward");
+    expect(trail.at(-1)?.title).toBe("Placed: 0.1 DAI escrowed");
   });
 
   it("shows each guard hold on the HBAR order with both prices", () => {

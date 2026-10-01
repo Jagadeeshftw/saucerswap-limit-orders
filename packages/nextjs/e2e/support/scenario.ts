@@ -1,5 +1,5 @@
-import heldOrderLogs from "../../utils/orders/__fixtures__/order-3-held-logs.json";
-import filledOrderLogs from "../../utils/orders/__fixtures__/order-5-logs.json";
+import filledOrderLogs from "../../utils/orders/__fixtures__/order-2-filled-logs.json";
+import heldOrderLogs from "../../utils/orders/__fixtures__/order-4-held-logs.json";
 import { type LogEvent, mirrorTx } from "./logs";
 import { type Hex, pad, toHex, zeroHash } from "viem";
 
@@ -204,12 +204,12 @@ export const withOrderBook = (s: Scenario): Scenario => {
       status: 2,
       funded: false,
       budget: 0n,
-      createdAt: 1_790_748_364,
-      amountIn: 50_000_000n,
+      createdAt: 1_790_870_656,
+      amountIn: 10_000_000n,
       typeParam: 100_000_000n,
       slippageBps: 30,
     }),
-    "3": order({ typeParam: 10_000_000n, createdAt: 1_790_748_036, amountIn: 1_00_000_000n }),
+    "3": order({ typeParam: 10_000_000n, createdAt: 1_790_871_386, amountIn: 1_00_000_000n }),
     "9": order({
       status: 3,
       funded: false,

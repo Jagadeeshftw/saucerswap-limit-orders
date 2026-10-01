@@ -161,12 +161,12 @@ test.describe("Trade", () => {
 
   test("explains a failed transaction in plain words", async ({ page }, info) => {
     const s = baseScenario();
-    s.send = { kind: "revert", errorName: "InsufficientBudget", args: [1n, 1_226_330_544n] };
+    s.send = { kind: "revert", errorName: "InsufficientBudget", args: [1n, 956_148_323n] };
     await open(page, s, "/");
     await fillTicket(page, "20", "0.1100");
     await page.getByTestId("place-order").click();
     await expect(page.getByTestId("tx-error")).toContainText(
-      "The check budget is too small: send at least 12.2633 HBAR.",
+      "The check budget is too small: send at least 9.5615 HBAR.",
     );
     await capture(page, info, "12-tx-failed");
   });
@@ -356,7 +356,7 @@ test.describe("Order detail", () => {
 
   test("shows a filled order", async ({ page }, info) => {
     await open(page, withOrderBook(baseScenario()), "/orders/5");
-    await expect(page.getByTestId("trail")).toContainText("Filled: 0.5 DAI for 0.5008 USDC");
+    await expect(page.getByTestId("trail")).toContainText("Filled: 0.1 DAI for 0.1001 USDC");
     await expect(page.getByTestId("order-actions")).toHaveCount(0);
     await capture(page, info, "18-order-filled");
   });

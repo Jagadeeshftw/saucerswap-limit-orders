@@ -21,7 +21,8 @@ export const explainError = (error: unknown): string => {
   const args = (revert?.data?.args ?? []) as readonly unknown[];
   switch (name) {
     case "InsufficientBudget":
-      return `The check budget is too small: send at least ${formatHbar(args[1] as bigint)}.`;
+      // Rounded up, so following the advice always clears the minimum.
+      return `The check budget is too small: send at least ${formatHbar((((args[1] as bigint) + 9_999n) / 10_000n) * 10_000n)}.`;
     case "WrongValue":
       return "The HBAR sent does not cover the order amount. Refresh and try again.";
     case "InvalidSlippage":
