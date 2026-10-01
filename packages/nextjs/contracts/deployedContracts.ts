@@ -7,7 +7,7 @@ import { GenericContractsDeclaration } from "~~/utils/scaffold-hbar/contract";
 const deployedContracts = {
   296: {
     OrderVault: {
-      address: "0xba9c496d229b9868a804c2bcfbeac97e2bad1b1d",
+      address: "0xc265045c65d0114109072d60b3a60231427a06a9",
       abi: [
         {
           type: "constructor",
@@ -131,44 +131,6 @@ const deployedContracts = {
           ],
           outputs: [],
           stateMutability: "nonpayable",
-        },
-        {
-          type: "function",
-          name: "checkCost",
-          inputs: [
-            {
-              name: "marketId",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          outputs: [
-            {
-              name: "",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          stateMutability: "view",
-        },
-        {
-          type: "function",
-          name: "checkCostShared",
-          inputs: [
-            {
-              name: "fundedOrders",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          outputs: [
-            {
-              name: "",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          stateMutability: "view",
         },
         {
           type: "function",
@@ -310,30 +272,6 @@ const deployedContracts = {
             },
           ],
           stateMutability: "nonpayable",
-        },
-        {
-          type: "function",
-          name: "fillCost",
-          inputs: [
-            {
-              name: "marketId",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
-              name: "side",
-              type: "uint8",
-              internalType: "enum Side",
-            },
-          ],
-          outputs: [
-            {
-              name: "",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          stateMutability: "view",
         },
         {
           type: "function",
@@ -548,9 +486,9 @@ const deployedContracts = {
                   internalType: "enum Side",
                 },
                 {
-                  name: "trigger",
+                  name: "orderType",
                   type: "uint8",
-                  internalType: "enum Trigger",
+                  internalType: "uint8",
                 },
                 {
                   name: "status",
@@ -583,7 +521,7 @@ const deployedContracts = {
                   internalType: "uint128",
                 },
                 {
-                  name: "triggerPrice",
+                  name: "typeParam",
                   type: "uint128",
                   internalType: "uint128",
                 },
@@ -591,6 +529,11 @@ const deployedContracts = {
                   name: "budget",
                   type: "uint128",
                   internalType: "uint128",
+                },
+                {
+                  name: "typeState",
+                  type: "bytes32",
+                  internalType: "bytes32",
                 },
               ],
             },
@@ -845,64 +788,6 @@ const deployedContracts = {
         },
         {
           type: "function",
-          name: "minBudget",
-          inputs: [
-            {
-              name: "marketId",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
-              name: "side",
-              type: "uint8",
-              internalType: "enum Side",
-            },
-          ],
-          outputs: [
-            {
-              name: "",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          stateMutability: "view",
-        },
-        {
-          type: "function",
-          name: "nextCheckDelay",
-          inputs: [
-            {
-              name: "marketId",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
-              name: "trigger",
-              type: "uint8",
-              internalType: "enum Trigger",
-            },
-            {
-              name: "triggerPrice",
-              type: "uint256",
-              internalType: "uint256",
-            },
-            {
-              name: "expiry",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          outputs: [
-            {
-              name: "",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          stateMutability: "view",
-        },
-        {
-          type: "function",
           name: "openOrders",
           inputs: [
             {
@@ -922,11 +807,49 @@ const deployedContracts = {
         },
         {
           type: "function",
-          name: "owner",
+          name: "orderTypeActive",
+          inputs: [
+            {
+              name: "id",
+              type: "uint8",
+              internalType: "uint8",
+            },
+          ],
+          outputs: [
+            {
+              name: "active",
+              type: "bool",
+              internalType: "bool",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "orderTypeCount",
           inputs: [],
           outputs: [
             {
               name: "",
+              type: "uint8",
+              internalType: "uint8",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "orderTypes",
+          inputs: [
+            {
+              name: "id",
+              type: "uint8",
+              internalType: "uint8",
+            },
+          ],
+          outputs: [
+            {
+              name: "impl",
               type: "address",
               internalType: "address",
             },
@@ -935,13 +858,13 @@ const deployedContracts = {
         },
         {
           type: "function",
-          name: "payerFloat",
+          name: "owner",
           inputs: [],
           outputs: [
             {
-              name: "float",
-              type: "uint256",
-              internalType: "uint256",
+              name: "",
+              type: "address",
+              internalType: "address",
             },
           ],
           stateMutability: "view",
@@ -979,9 +902,9 @@ const deployedContracts = {
                   internalType: "enum Side",
                 },
                 {
-                  name: "trigger",
+                  name: "orderType",
                   type: "uint8",
-                  internalType: "enum Trigger",
+                  internalType: "uint8",
                 },
                 {
                   name: "amountIn",
@@ -989,7 +912,7 @@ const deployedContracts = {
                   internalType: "uint128",
                 },
                 {
-                  name: "triggerPrice",
+                  name: "typeParam",
                   type: "uint128",
                   internalType: "uint128",
                 },
@@ -1014,6 +937,25 @@ const deployedContracts = {
             },
           ],
           stateMutability: "payable",
+        },
+        {
+          type: "function",
+          name: "registerOrderType",
+          inputs: [
+            {
+              name: "impl",
+              type: "address",
+              internalType: "address",
+            },
+          ],
+          outputs: [
+            {
+              name: "id",
+              type: "uint8",
+              internalType: "uint8",
+            },
+          ],
+          stateMutability: "nonpayable",
         },
         {
           type: "function",
@@ -1097,16 +1039,21 @@ const deployedContracts = {
         },
         {
           type: "function",
-          name: "surplus",
-          inputs: [],
-          outputs: [
+          name: "setOrderTypeActive",
+          inputs: [
             {
-              name: "",
-              type: "uint256",
-              internalType: "uint256",
+              name: "id",
+              type: "uint8",
+              internalType: "uint8",
+            },
+            {
+              name: "active",
+              type: "bool",
+              internalType: "bool",
             },
           ],
-          stateMutability: "view",
+          outputs: [],
+          stateMutability: "nonpayable",
         },
         {
           type: "function",
@@ -1125,49 +1072,6 @@ const deployedContracts = {
           ],
           outputs: [],
           stateMutability: "nonpayable",
-        },
-        {
-          type: "function",
-          name: "sweepGasLimit",
-          inputs: [
-            {
-              name: "marketId",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          outputs: [
-            {
-              name: "",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          stateMutability: "view",
-        },
-        {
-          type: "function",
-          name: "sweepStatus",
-          inputs: [
-            {
-              name: "marketId",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          outputs: [
-            {
-              name: "status",
-              type: "uint8",
-              internalType: "enum SweepStatus",
-            },
-            {
-              name: "nextSweepAt",
-              type: "uint256",
-              internalType: "uint256",
-            },
-          ],
-          stateMutability: "view",
         },
         {
           type: "function",
@@ -1730,6 +1634,19 @@ const deployedContracts = {
         },
         {
           type: "event",
+          name: "OrderEvalSkipped",
+          inputs: [
+            {
+              name: "orderId",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
           name: "OrderExpired",
           inputs: [
             {
@@ -1843,10 +1760,10 @@ const deployedContracts = {
               internalType: "enum Side",
             },
             {
-              name: "trigger",
+              name: "orderType",
               type: "uint8",
               indexed: false,
-              internalType: "enum Trigger",
+              internalType: "uint8",
             },
             {
               name: "amountIn",
@@ -1855,7 +1772,7 @@ const deployedContracts = {
               internalType: "uint256",
             },
             {
-              name: "triggerPrice",
+              name: "typeParam",
               type: "uint256",
               indexed: false,
               internalType: "uint256",
@@ -1877,6 +1794,63 @@ const deployedContracts = {
               type: "uint256",
               indexed: false,
               internalType: "uint256",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "OrderStateUpdated",
+          inputs: [
+            {
+              name: "orderId",
+              type: "uint256",
+              indexed: true,
+              internalType: "uint256",
+            },
+            {
+              name: "state",
+              type: "bytes32",
+              indexed: false,
+              internalType: "bytes32",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "OrderTypeActiveSet",
+          inputs: [
+            {
+              name: "id",
+              type: "uint8",
+              indexed: true,
+              internalType: "uint8",
+            },
+            {
+              name: "active",
+              type: "bool",
+              indexed: false,
+              internalType: "bool",
+            },
+          ],
+          anonymous: false,
+        },
+        {
+          type: "event",
+          name: "OrderTypeRegistered",
+          inputs: [
+            {
+              name: "id",
+              type: "uint8",
+              indexed: true,
+              internalType: "uint8",
+            },
+            {
+              name: "impl",
+              type: "address",
+              indexed: false,
+              internalType: "address",
             },
           ],
           anonymous: false,
@@ -2087,7 +2061,7 @@ const deployedContracts = {
             {
               name: "operation",
               type: "uint8",
-              internalType: "enum OrderVault.HtsOperation",
+              internalType: "enum HtsOperation",
             },
             {
               name: "responseCode",
@@ -2141,6 +2115,11 @@ const deployedContracts = {
         {
           type: "error",
           name: "InvalidMarket",
+          inputs: [],
+        },
+        {
+          type: "error",
+          name: "InvalidOrderParams",
           inputs: [],
         },
         {
@@ -2251,6 +2230,17 @@ const deployedContracts = {
         },
         {
           type: "error",
+          name: "OrderTypeInactive",
+          inputs: [
+            {
+              name: "id",
+              type: "uint8",
+              internalType: "uint8",
+            },
+          ],
+        },
+        {
+          type: "error",
           name: "OwnableInvalidOwner",
           inputs: [
             {
@@ -2326,6 +2316,17 @@ const deployedContracts = {
         },
         {
           type: "error",
+          name: "UnknownOrderType",
+          inputs: [
+            {
+              name: "id",
+              type: "uint8",
+              internalType: "uint8",
+            },
+          ],
+        },
+        {
+          type: "error",
           name: "WrongValue",
           inputs: [
             {
@@ -2342,7 +2343,697 @@ const deployedContracts = {
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 41177419,
+      deployedOnBlock: 41223029,
+    },
+    LimitOrderType: {
+      address: "0x0b6dedd3fdf794be447efc4da514207259977cca",
+      abi: [
+        {
+          type: "function",
+          name: "evaluate",
+          inputs: [
+            {
+              name: "side",
+              type: "uint8",
+              internalType: "enum Side",
+            },
+            {
+              name: "param",
+              type: "uint128",
+              internalType: "uint128",
+            },
+            {
+              name: "state",
+              type: "bytes32",
+              internalType: "bytes32",
+            },
+            {
+              name: "oraclePrice",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "distanceBps",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "newState",
+              type: "bytes32",
+              internalType: "bytes32",
+            },
+          ],
+          stateMutability: "pure",
+        },
+        {
+          type: "function",
+          name: "minOut",
+          inputs: [
+            {
+              name: "",
+              type: "uint8",
+              internalType: "enum Side",
+            },
+            {
+              name: "",
+              type: "uint128",
+              internalType: "uint128",
+            },
+            {
+              name: "",
+              type: "uint128",
+              internalType: "uint128",
+            },
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "pure",
+        },
+        {
+          type: "function",
+          name: "validate",
+          inputs: [
+            {
+              name: "",
+              type: "uint8",
+              internalType: "enum Side",
+            },
+            {
+              name: "amountIn",
+              type: "uint128",
+              internalType: "uint128",
+            },
+            {
+              name: "param",
+              type: "uint128",
+              internalType: "uint128",
+            },
+            {
+              name: "",
+              type: "uint16",
+              internalType: "uint16",
+            },
+            {
+              name: "",
+              type: "uint40",
+              internalType: "uint40",
+            },
+            {
+              name: "",
+              type: "uint40",
+              internalType: "uint40",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "bool",
+              internalType: "bool",
+            },
+          ],
+          stateMutability: "pure",
+        },
+      ],
+      inheritedFunctions: {},
+      deployedOnBlock: 41223042,
+    },
+    StopOrderType: {
+      address: "0x11dfda5ca30d3ed806d24ec0cc8eee06b0872c2b",
+      abi: [
+        {
+          type: "function",
+          name: "evaluate",
+          inputs: [
+            {
+              name: "side",
+              type: "uint8",
+              internalType: "enum Side",
+            },
+            {
+              name: "param",
+              type: "uint128",
+              internalType: "uint128",
+            },
+            {
+              name: "state",
+              type: "bytes32",
+              internalType: "bytes32",
+            },
+            {
+              name: "oraclePrice",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "distanceBps",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "newState",
+              type: "bytes32",
+              internalType: "bytes32",
+            },
+          ],
+          stateMutability: "pure",
+        },
+        {
+          type: "function",
+          name: "minOut",
+          inputs: [
+            {
+              name: "",
+              type: "uint8",
+              internalType: "enum Side",
+            },
+            {
+              name: "",
+              type: "uint128",
+              internalType: "uint128",
+            },
+            {
+              name: "",
+              type: "uint128",
+              internalType: "uint128",
+            },
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "pure",
+        },
+        {
+          type: "function",
+          name: "validate",
+          inputs: [
+            {
+              name: "",
+              type: "uint8",
+              internalType: "enum Side",
+            },
+            {
+              name: "amountIn",
+              type: "uint128",
+              internalType: "uint128",
+            },
+            {
+              name: "param",
+              type: "uint128",
+              internalType: "uint128",
+            },
+            {
+              name: "",
+              type: "uint16",
+              internalType: "uint16",
+            },
+            {
+              name: "",
+              type: "uint40",
+              internalType: "uint40",
+            },
+            {
+              name: "",
+              type: "uint40",
+              internalType: "uint40",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "bool",
+              internalType: "bool",
+            },
+          ],
+          stateMutability: "pure",
+        },
+      ],
+      inheritedFunctions: {},
+      deployedOnBlock: 41223046,
+    },
+    TrailingStopType: {
+      address: "0x2e449f0ed73d54239b9cd647d0a23ab1d9c78a36",
+      abi: [
+        {
+          type: "function",
+          name: "MAX_TRAIL_BPS",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "uint128",
+              internalType: "uint128",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "MIN_TRAIL_BPS",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "uint128",
+              internalType: "uint128",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "evaluate",
+          inputs: [
+            {
+              name: "",
+              type: "uint8",
+              internalType: "enum Side",
+            },
+            {
+              name: "param",
+              type: "uint128",
+              internalType: "uint128",
+            },
+            {
+              name: "state",
+              type: "bytes32",
+              internalType: "bytes32",
+            },
+            {
+              name: "oraclePrice",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "distanceBps",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "newState",
+              type: "bytes32",
+              internalType: "bytes32",
+            },
+          ],
+          stateMutability: "pure",
+        },
+        {
+          type: "function",
+          name: "minOut",
+          inputs: [
+            {
+              name: "",
+              type: "uint8",
+              internalType: "enum Side",
+            },
+            {
+              name: "",
+              type: "uint128",
+              internalType: "uint128",
+            },
+            {
+              name: "",
+              type: "uint128",
+              internalType: "uint128",
+            },
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "pure",
+        },
+        {
+          type: "function",
+          name: "validate",
+          inputs: [
+            {
+              name: "side",
+              type: "uint8",
+              internalType: "enum Side",
+            },
+            {
+              name: "amountIn",
+              type: "uint128",
+              internalType: "uint128",
+            },
+            {
+              name: "param",
+              type: "uint128",
+              internalType: "uint128",
+            },
+            {
+              name: "",
+              type: "uint16",
+              internalType: "uint16",
+            },
+            {
+              name: "",
+              type: "uint40",
+              internalType: "uint40",
+            },
+            {
+              name: "",
+              type: "uint40",
+              internalType: "uint40",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "bool",
+              internalType: "bool",
+            },
+          ],
+          stateMutability: "pure",
+        },
+      ],
+      inheritedFunctions: {},
+      deployedOnBlock: 41223053,
+    },
+    OrderVaultLens: {
+      address: "0x71bef6696d1c684f2f9d1581f4adb07e9d7e9d8e",
+      abi: [
+        {
+          type: "constructor",
+          inputs: [
+            {
+              name: "vault_",
+              type: "address",
+              internalType: "contract OrderVault",
+            },
+          ],
+          stateMutability: "nonpayable",
+        },
+        {
+          type: "function",
+          name: "VAULT",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "address",
+              internalType: "contract OrderVault",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "checkCost",
+          inputs: [
+            {
+              name: "marketId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "checkCostShared",
+          inputs: [
+            {
+              name: "fundedOrders",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "fillCost",
+          inputs: [
+            {
+              name: "marketId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "side",
+              type: "uint8",
+              internalType: "enum Side",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "minBudget",
+          inputs: [
+            {
+              name: "marketId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "side",
+              type: "uint8",
+              internalType: "enum Side",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "nextBatch",
+          inputs: [
+            {
+              name: "marketId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "batch",
+              type: "uint256[]",
+              internalType: "uint256[]",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "nextCheckDelay",
+          inputs: [
+            {
+              name: "marketId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "orderType",
+              type: "uint8",
+              internalType: "uint8",
+            },
+            {
+              name: "side",
+              type: "uint8",
+              internalType: "enum Side",
+            },
+            {
+              name: "typeParam",
+              type: "uint128",
+              internalType: "uint128",
+            },
+            {
+              name: "expiry",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "orderNextCheckDelay",
+          inputs: [
+            {
+              name: "orderId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "payerFloat",
+          inputs: [],
+          outputs: [
+            {
+              name: "float",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "previewCharges",
+          inputs: [
+            {
+              name: "marketId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "share",
+              type: "uint256",
+              internalType: "uint256",
+            },
+            {
+              name: "parkFee",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "surplus",
+          inputs: [],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "sweepGasLimit",
+          inputs: [
+            {
+              name: "marketId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "function",
+          name: "sweepStatus",
+          inputs: [
+            {
+              name: "marketId",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          outputs: [
+            {
+              name: "status",
+              type: "uint8",
+              internalType: "enum SweepStatus",
+            },
+            {
+              name: "nextSweepAt",
+              type: "uint256",
+              internalType: "uint256",
+            },
+          ],
+          stateMutability: "view",
+        },
+        {
+          type: "error",
+          name: "InvalidCosts",
+          inputs: [],
+        },
+      ],
+      inheritedFunctions: {},
+      deployedOnBlock: 41223060,
     },
   },
 } as const;
