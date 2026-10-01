@@ -4,10 +4,15 @@ pragma solidity ^0.8.28;
 import { ScaffoldETHDeploy } from "./DeployHelpers.s.sol";
 import { MarketConfig } from "./MarketConfig.sol";
 import { OrderVault } from "../contracts/OrderVault.sol";
+import { OrderVaultLens } from "../contracts/OrderVaultLens.sol";
+import { LimitOrderType } from "../contracts/ordertypes/LimitOrderType.sol";
+import { StopOrderType } from "../contracts/ordertypes/StopOrderType.sol";
+import { TrailingStopType } from "../contracts/ordertypes/TrailingStopType.sol";
 import { IHederaTokenService } from "../contracts/interfaces/IHederaTokenService.sol";
 import { ISaucerSwapV2Router } from "../contracts/interfaces/ISaucerSwapV2.sol";
 
-/// @notice Deploys OrderVault to Hedera testnet, creates its order NFT collection and lists both markets.
+/// @notice Deploys OrderVault to Hedera testnet, creates its order NFT collection, lists both markets, registers
+///         the three order types (limit 0, stop 1, trailing stop 2) and deploys the read-only OrderVaultLens.
 /// @dev Run through the root `foundry:deploy` script (Hedera testnet by default). The deployer needs ~25 testnet HBAR.
 ///
 ///      Forge runs a script locally before broadcasting it, and a local fork has no HTS system contract.
@@ -24,6 +29,7 @@ contract DeployScript is ScaffoldETHDeploy {
     address internal constant HTS = address(0x167);
 
     error UnsupportedChain(uint256 chainId);
+    error UnexpectedOrderTypeId(uint8 got, uint8 want);
 
     function run() external ScaffoldEthDeployerRunner {
         if (block.chainid != MarketConfig.HEDERA_TESTNET) revert UnsupportedChain(block.chainid);
@@ -37,7 +43,22 @@ contract DeployScript is ScaffoldETHDeploy {
         vault.listMarket{ gas: LIST_MARKET_GAS }(MarketConfig.usdcDai());
         vault.fund{ value: FLOAT_ENDOWMENT }();
 
+        // The frontend and docs refer to the types by these ids, so the registration order is fixed.
+        _register(vault, address(new LimitOrderType()), 0);
+        _register(vault, address(new StopOrderType()), 1);
+        _register(vault, address(new TrailingStopType()), 2);
+        OrderVaultLens lens = new OrderVaultLens(vault);
+
         deployments.push(Deployment({ name: "OrderVault", addr: address(vault) }));
+        deployments.push(Deployment({ name: "OrderVaultLens", addr: address(lens) }));
+        deployments.push(Deployment({ name: "LimitOrderType", addr: vault.orderTypes(0) }));
+        deployments.push(Deployment({ name: "StopOrderType", addr: vault.orderTypes(1) }));
+        deployments.push(Deployment({ name: "TrailingStopType", addr: vault.orderTypes(2) }));
+    }
+
+    function _register(OrderVault vault, address impl, uint8 want) internal {
+        uint8 id = vault.registerOrderType(impl);
+        if (id != want) revert UnexpectedOrderTypeId(id, want);
     }
 
     function _mockHtsForLocalPass() internal {
