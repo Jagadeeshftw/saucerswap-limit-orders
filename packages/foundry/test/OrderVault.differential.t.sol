@@ -305,7 +305,14 @@ contract OrderVaultDifferentialTest is StdInvariant, Test {
         targetSender(makeAddr("differential-caller"));
     }
 
+    /// @dev Measured without Foundry's isolation mode, which Foundry 1.8 turned on by default (1.5 had it off). The
+    ///      handler calls each vault directly (call depth 1), and isolation runs every depth-1 call as a separate
+    ///      simulated transaction: `gasleft()` around the sweep then also counts that transaction's intrinsic cost,
+    ///      fresh access list and refund accounting, which differ per vault and push the comparison over the bound
+    ///      (with isolation on, Foundry 1.5 fails the same way; with it off, 1.8 passes). Every invariant call is
+    ///      already its own transaction with cold accounts, so the sweep's execution gas is measured cold either way.
     /// forge-config: default.gas_limit = 9223372036854775807
+    /// forge-config: default.isolate = false
     /// forge-config: default.invariant.runs = 256
     /// forge-config: default.invariant.depth = 100
     /// forge-config: default.invariant.fail-on-revert = true

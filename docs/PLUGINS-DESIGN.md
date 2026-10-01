@@ -199,7 +199,9 @@ trigger they tighten, with no new scheduling code.
 `test/GasMeasure.t.sol` runs each scenario on the v1.0.1 vault and on this one from the same snapshot, each
 placement and sweep in its own transaction (`forge test --match-contract GasMeasure --isolate -vv`). The mocks
 stand in for HTS, HSS and SaucerSwap, so absolute numbers are below testnet's; the difference is EVM work and
-carries over.
+carries over. The tables were measured with Foundry 1.5.0. Foundry 1.8's isolation mode reports every sweep about
+2,800 gas higher for both vaults, so check deltas are unchanged; sweeps that clear storage (fills, expiries) read
+higher by roughly their storage refund, and the fill delta comes out about 2.8k larger.
 
 | Scheduled sweep | v1.0.1 | v1.1 | Difference |
 |---|---|---|---|

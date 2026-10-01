@@ -54,10 +54,10 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
 
-      # Pinned to the Foundry release the test suite is validated on; see README "Prerequisites".
+      # The latest Foundry, as a judge scaffolding the template today would have; CI also covers v1.5.0.
       - uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: v1.5.0
+          version: stable
 
       - name: Install gitleaks
         run: |

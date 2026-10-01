@@ -84,7 +84,7 @@ Prerequisites:
 - Node.js 20.18.3 or later.
 - Git with `user.name` and `user.email` set; the CLI makes the first commit.
 - For the Corepack-managed package manager, run `corepack enable` once (Node 25 and later no longer bundle Corepack: `npm install -g corepack`).
-- Foundry 1.5 and `make`, for the contracts, tests and deploy scripts. CI pins 1.5.0; `foundryup --install 1.5.0` installs it. Foundry 1.8 builds everything and passes every test except the differential campaign's gas bound, which its fuzzer measures differently.
+- Foundry 1.5 or later and `make`, for the contracts, tests and deploy scripts. CI runs the whole suite on Foundry 1.5.0 and on the latest stable release.
 - Chromium for the browser tests, once: `cd packages/nextjs && npx playwright install chromium`.
 
 Commands below use the project's package manager; on GitHub they are shown for the template's default, and a project created with the other one gets them rewritten by the CLI. Put flags for a script after `--`, which works with both: `yarn foundry:deploy -- --keystore my-key`.
