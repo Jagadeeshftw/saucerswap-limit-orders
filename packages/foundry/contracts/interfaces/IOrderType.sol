@@ -6,7 +6,7 @@ import { Side } from "../types/OrderTypes.sol";
 /// @title Pluggable order-type strategy.
 /// @notice A stateless, view-only strategy for one kind of order (limit, stop-loss, trailing stop, …). The vault
 ///         owns all order state and all funds; a strategy only reads what the vault passes and returns decisions.
-///         Because every function is `view` and the vault reaches it with `staticcall`, a strategy can never write
+///         Because every function is `pure` and the vault reaches it with `staticcall`, a strategy can never write
 ///         storage, move value, or reenter. The vault always enforces the guard and its own Chainlink-priced
 ///         slippage floor on top of whatever a strategy returns, so a buggy or hostile strategy cannot fill an
 ///         order at a bad price or past the guard — see `minOut`.
@@ -18,6 +18,7 @@ interface IOrderType {
     /// @param slippageBps Maker's slippage tolerance.
     /// @param expiry     Order expiry (unix seconds).
     /// @param nowTs      Current block timestamp, passed in so the strategy stays pure.
+    /// @return ok        Whether the parameters are valid for this type.
     function validate(Side side, uint128 amountIn, uint128 param, uint16 slippageBps, uint40 expiry, uint40 nowTs)
         external
         pure
@@ -40,6 +41,10 @@ interface IOrderType {
     /// @notice An optional extra minimum-out floor, priced from Chainlink only. The vault takes the MAXIMUM of
     ///         this and its own Chainlink floor (Chainlink value less the maker's slippage), so a strategy can
     ///         only ever ask for MORE protection, never less. Return 0 to rely entirely on the vault's floor.
+    /// @param side        Sell or buy.
+    /// @param amountIn    Amount escrowed.
+    /// @param param       The type parameter (see `validate`).
     /// @param oraclePrice The Chainlink cross price for the market.
+    /// @return The floor, in the output token's raw units; 0 for none.
     function minOut(Side side, uint128 amountIn, uint128 param, uint256 oraclePrice) external pure returns (uint256);
 }

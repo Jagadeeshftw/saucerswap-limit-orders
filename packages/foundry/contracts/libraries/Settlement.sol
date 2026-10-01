@@ -13,14 +13,28 @@ import { HtsError, HtsOperation } from "../types/OrderTypes.sol";
 ///         to spare. The vault keeps the readable sweep → evaluate → guard → fill flow and calls here only for the
 ///         external interactions; it still enforces the guard and its own Chainlink slippage floor before any swap.
 library Settlement {
+    /// @dev HTS response code for success.
     int64 internal constant HTS_SUCCESS = 22;
+    /// @dev HTS response code for a token already associated with the account.
     int64 internal constant HTS_ALREADY_ASSOCIATED = 194;
+    /// @dev Stands for HBAR in token arguments.
     address internal constant HBAR = address(0);
+    /// @dev Seconds a swap stays valid: its router deadline.
     uint256 internal constant SWAP_DEADLINE = 300;
 
     /// @notice Swap `amountIn` of `tokenIn` for `tokenOut` on SaucerSwap V2, requiring at least `minOut`. For an
     ///         HBAR leg, WHBAR is used and the router wraps/unwraps. The caller has already checked escrow and set
     ///         `minOut` from Chainlink, so the swap's own `amountOutMinimum` is the final price protection.
+    /// @param router The SaucerSwap V2 SwapRouter.
+    /// @param whbar The WHBAR token, substituted for an HBAR leg.
+    /// @param poolFee The pool's fee, in hundredths of a basis point.
+    /// @param tokenIn Input token; address(0) for HBAR.
+    /// @param tokenOut Output token; address(0) for HBAR.
+    /// @param amountIn Input amount, in raw units.
+    /// @param minOut Smallest acceptable output, in raw units.
+    /// @return amountOut Output received, in raw units.
+    /// @dev Reverts `TransferRejected` if approving the router for a token input returns false. The router
+    ///      reverts if the output is below `minOut`.
     function swap(
         ISaucerSwapV2Router router,
         address whbar,
@@ -56,9 +70,15 @@ library Settlement {
         }
     }
 
+    /// @notice Approving the router for the input token returned false.
     error TransferRejected();
 
     /// @notice Mint one order NFT in `collection` and transfer it to `to`. The serial is the order id.
+    /// @param hts The HTS system contract.
+    /// @param collection The order NFT collection.
+    /// @param to The maker.
+    /// @return orderId The minted serial number.
+    /// @dev Reverts `HtsError` (`Mint` or `TransferNft`) if HTS refuses either step.
     function mintNft(IHederaTokenService hts, address collection, address to) public returns (uint256 orderId) {
         bytes[] memory metadata = new bytes[](1);
         metadata[0] = bytes("saucerswap-limit-order");
@@ -71,6 +91,11 @@ library Settlement {
 
     /// @notice Retire a settled order's NFT (burn if the vault holds it, else wipe from the holder). Never reverts;
     ///         returns the response code so the vault can report a failure through an event without blocking settle.
+    /// @param hts The HTS system contract.
+    /// @param collection The order NFT collection.
+    /// @param orderId The order's serial number.
+    /// @param holder The NFT's current holder.
+    /// @return rc The HTS response code (22 is success).
     function retireNft(IHederaTokenService hts, address collection, uint256 orderId, address holder)
         public
         returns (int64 rc)
@@ -86,18 +111,30 @@ library Settlement {
     }
 
     /// @notice Associate the vault with an HTS token (idempotent).
+    /// @param hts The HTS system contract.
+    /// @param token The token.
+    /// @dev Reverts `HtsError` (`Associate`) unless HTS answers success (22) or already associated (194).
     function associate(IHederaTokenService hts, address token) public {
         int64 rc = hts.associateToken(address(this), token);
         if (rc != HTS_SUCCESS && rc != HTS_ALREADY_ASSOCIATED) revert HtsError(HtsOperation.Associate, rc);
     }
 
     /// @notice Pull `amount` of `token` from `from` to the vault; returns false on a failed or false-returning move.
+    /// @param token The token.
+    /// @param from The owner, who must have approved the vault.
+    /// @param to The recipient (the vault).
+    /// @param amount Amount, in raw units.
+    /// @return Whether the transfer succeeded.
     function pullToken(address token, address from, address to, uint256 amount) public returns (bool) {
         (bool ok, bytes memory ret) = token.call(abi.encodeCall(IERC20.transferFrom, (from, to, amount)));
         return ok && (ret.length == 0 || abi.decode(ret, (bool)));
     }
 
     /// @notice Send `amount` of `token` to `to`; returns false on a failed or false-returning move.
+    /// @param token The token.
+    /// @param to The recipient.
+    /// @param amount Amount, in raw units.
+    /// @return Whether the transfer succeeded.
     function transferToken(address token, address to, uint256 amount) public returns (bool) {
         (bool ok, bytes memory ret) = token.call(abi.encodeCall(IERC20.transfer, (to, amount)));
         return ok && (ret.length == 0 || abi.decode(ret, (bool)));

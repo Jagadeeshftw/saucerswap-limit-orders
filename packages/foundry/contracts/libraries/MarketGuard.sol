@@ -13,24 +13,37 @@ import { GuardParams, GuardReading, GuardState, Market } from "../types/OrderTyp
 library MarketGuard {
     using SafeCast for int256;
 
-    /// @dev A shorter window is close to spot price; a longer one outruns SaucerSwap's observation history.
+    /// @dev Shortest `twapWindow`: a shorter window is close to spot price.
     uint256 internal constant MIN_TWAP_WINDOW = 300;
+    /// @dev Longest `twapWindow`: a longer one outruns SaucerSwap's observation history.
     uint256 internal constant MAX_TWAP_WINDOW = 1 days;
-    /// @dev Hedera's Chainlink feeds have a 24 h heartbeat; allow two hours of slack on top.
+    /// @dev Shortest `maxOracleAge`.
     uint256 internal constant MIN_ORACLE_AGE = 60;
+    /// @dev Longest `maxOracleAge`: Hedera's Chainlink feeds have a 24 h heartbeat; allow two hours of slack on top.
     uint256 internal constant MAX_ORACLE_AGE = 26 hours;
+    /// @dev Largest `maxDeviationBps` (10%).
     uint256 internal constant MAX_DEVIATION_BPS = 1_000;
+    /// @dev Largest `maxSlippageBps` (10%).
     uint256 internal constant MAX_SLIPPAGE_BPS = 1_000;
 
     /// @notice Whether guard parameters keep the guard meaningful. The owner can tune a market but can't
     ///         switch its protection off: no near-spot TWAP, no unlimited oracle age, no unbounded deviation,
     ///         and slippage must exceed the pool fee (or no order could ever fill) without exceeding 10%.
+    /// @param g The guard settings: `twapWindow` 300 to 86,400 s, `maxOracleAge` 60 to 93,600 s, `maxDeviationBps`
+    ///        1 to 1,000, and `maxSlippageBps` above `poolFee / 100` and at most 1,000.
+    /// @param poolFee The market pool's fee, in hundredths of a basis point.
+    /// @return Whether every field is within its bounds.
     function paramsValid(GuardParams calldata g, uint24 poolFee) external pure returns (bool) {
         return g.twapWindow >= MIN_TWAP_WINDOW && g.twapWindow <= MAX_TWAP_WINDOW && g.maxOracleAge >= MIN_ORACLE_AGE
             && g.maxOracleAge <= MAX_ORACLE_AGE && g.maxDeviationBps > 0 && g.maxDeviationBps <= MAX_DEVIATION_BPS
             && g.maxSlippageBps > poolFee / 100 && g.maxSlippageBps <= MAX_SLIPPAGE_BPS;
     }
 
+    /// @notice The guard's reading for a market: the Chainlink cross price, the pool TWAP price and the verdict.
+    /// @dev A feed or pool call that reverts gives the matching `GuardState` instead of reverting. Checks run in
+    ///      order and stop at the first failure: feed validity, feed age, TWAP, deviation.
+    /// @param m The market, in the vault's storage.
+    /// @return r The reading; see `GuardReading`.
     function read(Market storage m) external view returns (GuardReading memory r) {
         (uint256 baseUsd, uint256 baseUpdated) = readFeed(m.baseFeed);
         (uint256 quoteUsd, uint256 quoteUpdated) = readFeed(m.quoteFeed);
@@ -60,6 +73,11 @@ library MarketGuard {
     }
 
     /// @notice A feed's answer and update time, or zeros when the answer is unusable.
+    /// @dev Unusable means the call reverted, the answer is zero or negative, or the update time is zero or in the
+    ///      future.
+    /// @param feed A Chainlink aggregator.
+    /// @return answer The answer, in the feed's decimals; 0 when unusable.
+    /// @return updatedAt The answer's update time (unix seconds); 0 when unusable.
     function readFeed(IAggregatorV3 feed) internal view returns (uint256 answer, uint256 updatedAt) {
         try feed.latestRoundData() returns (uint80, int256 a, uint256, uint256 u, uint80) {
             if (a <= 0 || u == 0 || u > block.timestamp) return (0, 0);

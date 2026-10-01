@@ -19,13 +19,20 @@ library SweepMath {
     uint256 internal constant SWEEP_GRACE = 120;
 
     /// @notice What the batch charge needs to know about one order in a sweep's batch.
+    /// @param live Open, funded and not expired.
+    /// @param budget The order's budget, in tinybar.
+    /// @param reserve `reserve()` for the order's side, in tinybar.
     struct ChargeInput {
-        bool live; // open, funded and not expired
+        bool live;
         uint256 budget;
-        uint256 reserve; // `reserve()` for the order's side
+        uint256 reserve;
     }
 
     /// @notice Tinybar for `gas` at the configured gas price plus the safety margin.
+    /// @param c The vault's costs.
+    /// @param gas Gas units.
+    /// @param rate Tinybar per `RATE_UNIT` tinycents, from the 0x168 exchange-rate system contract.
+    /// @return Tinybar.
     function gasToTinybar(Costs memory c, uint256 gas, uint256 rate) internal pure returns (uint256) {
         uint256 tinycents = gas * c.gasPriceTinycents;
         tinycents += (tinycents * c.safetyBps) / PriceMath.BPS;
@@ -33,38 +40,61 @@ library SweepMath {
     }
 
     /// @notice Per-order charge for one scheduled check: an even share of the sweep's fixed cost plus its own check.
+    /// @param c The vault's costs.
+    /// @param fundedOrders Orders sharing the fixed cost; at least 1 (pass 1 for a solo check).
+    /// @param rate Tinybar per `RATE_UNIT` tinycents, from the 0x168 exchange-rate system contract.
+    /// @return Tinybar per order.
     function sweepShare(Costs memory c, uint256 fundedOrders, uint256 rate) internal pure returns (uint256) {
         uint256 fixedGas = uint256(c.scheduleGas) + c.sweepBaseGas;
         return gasToTinybar(c, (fixedGas + fundedOrders - 1) / fundedOrders + c.checkGas, rate);
     }
 
     /// @notice Gas to fill and settle one order whose input is HBAR (`hbarIn`) or an HTS token.
+    /// @param c The vault's costs.
+    /// @param hbarIn Whether the order's input is HBAR.
+    /// @return Gas units.
     function fillGas(Costs memory c, bool hbarIn) internal pure returns (uint256) {
         return uint256(hbarIn ? c.fillGasHbarIn : c.fillGasTokenIn) + c.settleGas;
     }
 
     /// @notice The most one order can owe for the chain's final sweep: running it alone, with no reschedule.
+    /// @param c The vault's costs.
+    /// @return Gas units.
     function tailGas(Costs memory c) internal pure returns (uint256) {
         return uint256(c.sweepBaseGas) + c.checkGas;
     }
 
     /// @notice Gas a sweep keeps back so it can always reach the reschedule.
+    /// @param c The vault's costs.
+    /// @return Gas units.
     function finishGas(Costs memory c) internal pure returns (uint256) {
         return uint256(c.scheduleGas) + c.sweepBaseGas;
     }
 
     /// @notice Budget an order never spends on routine checks: its fill, plus its share of a final sweep.
+    /// @param c The vault's costs.
+    /// @param hbarIn Whether the order's input is HBAR.
+    /// @param rate Tinybar per `RATE_UNIT` tinycents, from the 0x168 exchange-rate system contract.
+    /// @return Tinybar.
     function reserve(Costs memory c, bool hbarIn, uint256 rate) internal pure returns (uint256) {
         return gasToTinybar(c, fillGas(c, hbarIn) + tailGas(c), rate);
     }
 
     /// @notice Smallest budget accepted at placement: the reserve plus `MIN_CHECKS_FUNDED` solo checks.
+    /// @param c The vault's costs.
+    /// @param hbarIn Whether the order's input is HBAR.
+    /// @param rate Tinybar per `RATE_UNIT` tinycents, from the 0x168 exchange-rate system contract.
+    /// @return Tinybar.
     function minBudget(Costs memory c, bool hbarIn, uint256 rate) internal pure returns (uint256) {
         return reserve(c, hbarIn, rate) + MIN_CHECKS_FUNDED * sweepShare(c, 1, rate);
     }
 
     /// @notice Gas limit for a sweep of a market with `openOrders` open orders: every order it will visit, and
     ///         as many fills as it may make, priced at the costlier token-in fill.
+    /// @param c The vault's costs.
+    /// @param sp The market's sweep settings.
+    /// @param openOrders The market's open orders.
+    /// @return Gas units.
     function sweepGasLimit(Costs memory c, SweepParams memory sp, uint256 openOrders) internal pure returns (uint256) {
         uint256 orders = openOrders > sp.maxOrders ? sp.maxOrders : openOrders;
         if (orders == 0) orders = 1;
@@ -77,6 +107,12 @@ library SweepMath {
     /// @notice Seconds to wait before the next check of an order `distanceBps` from its trigger: as long as the
     ///         price could plausibly need to cover that distance, within the market's bounds, and never past the
     ///         order's expiry (so expired orders are refunded promptly).
+    /// @param sp The market's sweep settings.
+    /// @param distanceBps The order's distance from its trigger, in bps.
+    /// @param expiry The order's expiry (unix seconds).
+    /// @param nowTs The current block timestamp.
+    /// @return d Seconds: `distanceBps` × 3,600 / `maxMoveBpsPerHour`, capped at `maxInterval` and at the time left
+    ///         to expiry, and never below `minInterval`.
     function delayFor(SweepParams memory sp, uint256 distanceBps, uint256 expiry, uint256 nowTs)
         internal
         pure
@@ -90,6 +126,10 @@ library SweepMath {
     }
 
     /// @notice Whether a market's sweep chain has stopped: nothing pending, or the pending one is long overdue.
+    /// @param pendingSchedule The pending schedule's address; zero when none.
+    /// @param nextSweepAt When the pending sweep is due (unix seconds).
+    /// @param nowTs The current block timestamp.
+    /// @return True when nothing is pending or `nowTs` is more than `SWEEP_GRACE` (120 s) past `nextSweepAt`.
     function isDead(address pendingSchedule, uint256 nextSweepAt, uint256 nowTs) internal pure returns (bool) {
         return pendingSchedule == address(0) || nowTs > nextSweepAt + SWEEP_GRACE;
     }
@@ -98,6 +138,11 @@ library SweepMath {
     ///         split over the live orders that can afford it (recounted until stable) plus its own check. Orders
     ///         that can't afford it pay `parkFee` from their reserve: their own check, and when nobody can pay, an
     ///         even part of this final sweep too.
+    /// @param c The vault's costs.
+    /// @param rate Tinybar per `RATE_UNIT` tinycents, from the 0x168 exchange-rate system contract.
+    /// @param orders The batch's orders.
+    /// @return share Tinybar charged to each order that can pay.
+    /// @return parkFee Tinybar charged to each order that is parked.
     function batchCharges(Costs memory c, uint256 rate, ChargeInput[] memory orders)
         internal
         pure

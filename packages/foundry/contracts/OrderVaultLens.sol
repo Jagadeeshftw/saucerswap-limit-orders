@@ -19,11 +19,13 @@ contract OrderVaultLens {
     ///      sweep would.
     uint256 internal constant EVAL_GAS = 100_000;
 
+    /// @notice The vault this lens reads.
     OrderVault public immutable VAULT;
 
     /// @notice The exchange-rate system contract did not answer; the same error the vault raises for it.
     error InvalidCosts();
 
+    /// @param vault_ The `OrderVault` to read.
     constructor(OrderVault vault_) {
         VAULT = vault_;
     }
@@ -33,27 +35,43 @@ contract OrderVaultLens {
     // ---------------------------------------------------------------------------------------
 
     /// @notice HBAR (tinybar) charged to an order per scheduled check if it were the only funded order.
+    /// @param marketId A listed market.
+    /// @return Tinybar per check.
+    /// @dev Reverts `UnknownMarket` (from the vault) if the market is not listed.
     function checkCost(uint256 marketId) external view returns (uint256) {
         VAULT.getMarket(marketId); // reverts UnknownMarket
         return SweepMath.sweepShare(_costs(), 1, _rate());
     }
 
     /// @notice HBAR (tinybar) charged per check when `fundedOrders` orders share the sweep.
+    /// @param fundedOrders Orders sharing the sweep's fixed cost; 0 is treated as 1.
+    /// @return Tinybar per check.
     function checkCostShared(uint256 fundedOrders) external view returns (uint256) {
         return SweepMath.sweepShare(_costs(), fundedOrders == 0 ? 1 : fundedOrders, _rate());
     }
 
     /// @notice HBAR (tinybar) an order always keeps back: its fill, plus its part of a final sweep.
+    /// @param marketId A listed market.
+    /// @param side The order's side, which decides whether its input is HBAR.
+    /// @return The reserve, in tinybar.
+    /// @dev Reverts `UnknownMarket` (from the vault) if the market is not listed.
     function fillCost(uint256 marketId, Side side) external view returns (uint256) {
         return SweepMath.reserve(_costs(), _hbarIn(VAULT.getMarket(marketId), side), _rate());
     }
 
     /// @notice Smallest budget `placeOrder` accepts: the reserve plus `MIN_CHECKS_FUNDED` solo checks.
+    /// @param marketId A listed market.
+    /// @param side The order's side, which decides whether its input is HBAR.
+    /// @return The minimum budget, in tinybar.
+    /// @dev Reverts `UnknownMarket` (from the vault) if the market is not listed.
     function minBudget(uint256 marketId, Side side) external view returns (uint256) {
         return SweepMath.minBudget(_costs(), _hbarIn(VAULT.getMarket(marketId), side), _rate());
     }
 
     /// @notice Gas limit the vault gives a market's next scheduled sweep, at today's open orders.
+    /// @param marketId A listed market.
+    /// @return The gas limit.
+    /// @dev Reverts `UnknownMarket` (from the vault) if the market is not listed.
     function sweepGasLimit(uint256 marketId) public view returns (uint256) {
         Market memory m = VAULT.getMarket(marketId);
         return SweepMath.sweepGasLimit(_costs(), m.sweep, VAULT.openOrders(marketId).length);
@@ -61,6 +79,7 @@ contract OrderVaultLens {
 
     /// @notice HBAR the vault keeps liquid so a scheduled sweep can always pay its gas: the costliest funded
     ///         market's sweep at the configured price.
+    /// @return float The float, in tinybar.
     function payerFloat() public view returns (uint256 float) {
         Costs memory c = _costs();
         uint256 rate = _rate();
@@ -74,6 +93,7 @@ contract OrderVaultLens {
     }
 
     /// @notice HBAR `withdrawSurplus` would pay out now: the balance beyond escrow, budgets, credits and the float.
+    /// @return The surplus, in tinybar.
     function surplus() external view returns (uint256) {
         uint256 owed = VAULT.escrowed(HBAR) + VAULT.totalBudgets() + VAULT.totalCredits(HBAR) + payerFloat();
         uint256 balance = address(VAULT).balance;
@@ -82,6 +102,10 @@ contract OrderVaultLens {
 
     /// @notice What a scheduled sweep of `marketId` would charge if it ran now: `share` per paying order, and
     ///         `parkFee` for an order whose budget can no longer cover a check (it is parked instead).
+    /// @param marketId A listed market.
+    /// @return share Tinybar charged to each order that can pay.
+    /// @return parkFee Tinybar charged to each order that is parked.
+    /// @dev Reverts `UnknownMarket` (from the vault) if the market is not listed.
     function previewCharges(uint256 marketId) external view returns (uint256 share, uint256 parkFee) {
         Market memory m = VAULT.getMarket(marketId);
         uint256[] memory batch = nextBatch(marketId);
@@ -103,6 +127,9 @@ contract OrderVaultLens {
 
     /// @notice The orders the next sweep of `marketId` will visit, in order: up to `maxOrders`, starting at the
     ///         market's rotating cursor.
+    /// @param marketId A listed market.
+    /// @return batch The order ids, in visiting order.
+    /// @dev Reverts `UnknownMarket` (from the vault) if the market is not listed.
     function nextBatch(uint256 marketId) public view returns (uint256[] memory batch) {
         Market memory m = VAULT.getMarket(marketId);
         uint256[] memory list = VAULT.openOrders(marketId);
@@ -119,6 +146,13 @@ contract OrderVaultLens {
     /// @notice Seconds until an order of `orderType` with `typeParam` would next be checked, at today's price.
     /// @dev The rule a sweep applies, for an order not placed yet (no per-type state); the frontend sizes budgets
     ///      with it. Held or triggered orders, and an unknown or failing type, get `minInterval`.
+    /// @param marketId A listed market.
+    /// @param orderType The order-type id.
+    /// @param side The order's side.
+    /// @param typeParam The type's parameter (trigger price or trail), as in `PlaceParams`.
+    /// @param expiry The order's expiry (unix seconds); the delay never runs past it.
+    /// @return Seconds until the check, within the market's `minInterval` and `maxInterval`.
+    /// @dev Reverts `UnknownMarket` (from the vault) if the market is not listed.
     function nextCheckDelay(uint256 marketId, uint8 orderType, Side side, uint128 typeParam, uint256 expiry)
         external
         view
@@ -133,6 +167,9 @@ contract OrderVaultLens {
 
     /// @notice Seconds until a placed order would next be checked at today's price, using its live per-type
     ///         state (e.g. a trailing stop's peak). Not open, or a failing strategy: `minInterval`.
+    /// @param orderId The order.
+    /// @return Seconds until the check.
+    /// @dev Reverts `UnknownMarket` (from the vault) for an unknown order id, whose market id reads as 0.
     function orderNextCheckDelay(uint256 orderId) external view returns (uint256) {
         Order memory o = VAULT.getOrder(orderId);
         SweepParams memory sp = VAULT.getMarket(o.marketId).sweep;
@@ -145,6 +182,10 @@ contract OrderVaultLens {
 
     /// @notice Whether a market's checks are running. `Stalled` means funded orders are waiting but no
     ///         schedule will fire (the vault could not pay one, or it was missed); anyone may `restartSweep`.
+    /// @param marketId A listed market.
+    /// @return status Idle, Scheduled or Stalled.
+    /// @return nextSweepAt When the pending (or missed) sweep is due (unix seconds); 0 when Idle.
+    /// @dev Reverts `UnknownMarket` (from the vault) if the market is not listed.
     function sweepStatus(uint256 marketId) external view returns (SweepStatus status, uint256 nextSweepAt) {
         VAULT.getMarket(marketId);
         (address pending, uint40 at,, uint32 fundedOrders,,) = VAULT.sweeps(marketId);

@@ -9,6 +9,7 @@
     ]
   },
   "scripts": {
+    "contracts:api": "node scripts/gen-contract-api.mjs",
     "format": "yarn next:format && yarn foundry:format",
     "foundry:account": "yarn workspace @sh/foundry account",
     "foundry:account:generate": "yarn workspace @sh/foundry account:generate",
